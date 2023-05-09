@@ -1,5 +1,3 @@
-![hexpy logo](https://github.com/ElisGrahn/hexpy/tree/main/res/logo.gif)
-
 *The logo was created as an 
 [**example**](https://github.com/ElisGrahn/hexpy/tree/main/examples/animate_logo) 
 using **hexpy** together with PIL and pygame*.
@@ -21,4 +19,5 @@ The purpose of **hexpy** is to provide a high level library that eases working w
     <text x="14" y="15" fill="#F28CF2">x</text>
     <text x="20" y="15" fill="#3673A5">p</text>
     <text x="28" y="15" fill="#FFD342">y</text>
+
 </svg> -->
