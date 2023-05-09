@@ -1,4 +1,4 @@
-from src.hexpy.hexpy import Hex, HexMap
+from hexpy.hexpy.hexpy import Hex, HexMap
 
 hexboard: HexMap
 turn: int = 1

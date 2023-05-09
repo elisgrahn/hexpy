@@ -5,7 +5,7 @@ from typing import Iterable
 import logo
 import pygame as p
 
-from src.hexpy.hexpy import Hex, HexMap
+from hexpy.hexpy.hexpy import Hex, HexMap
 
 ctypes.windll.user32.SetProcessDPIAware()
 
