@@ -1,6 +1,6 @@
 import time
 
-from hexpy.hexpy.hexpy import Hex, Hexigo, HexMap
+from hexpy import Hex, Hexigo, HexMap
 
 Q_GREEN = (172, 217, 127)
 R_BLUE = (127, 204, 242)

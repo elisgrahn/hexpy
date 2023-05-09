@@ -6,7 +6,8 @@ from itertools import cycle, islice
 from typing import Any
 
 import numpy as np
-from point import Point
+
+from .point import Point
 
 
 class Hex:
@@ -255,11 +256,11 @@ class Hex:
 
         # Just steps was provided, rotate around Hexigo
         if isinstance(input, int):
-            return self.rotate_left(input)
+            return self.rotate_right(input)
 
         # Just other Hex was provided, rotate 1 step around other Hex
         elif isinstance(input, Hex):
-            return self.rotate_left_around(input)
+            return self.rotate_right_around(input)
 
         # Both other Hex and steps was provided
         elif (
@@ -267,7 +268,7 @@ class Hex:
             and isinstance(input[0], Hex)
             and isinstance(input[1], int)
         ):
-            return self.rotate_left_around(*input)
+            return self.rotate_right_around(*input)
 
         else:
             # TODO

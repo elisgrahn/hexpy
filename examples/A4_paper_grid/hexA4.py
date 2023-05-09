@@ -3,7 +3,7 @@
 import pygame as p
 from pygame import gfxdraw
 
-from hexpy.hexpy.hexpy import Hex, HexMap
+from hexpy import Hex, HexMap
 
 # Following line is for windows not to duplicate window size
 # ctypes.windll.user32.SetProcessDPIAware()

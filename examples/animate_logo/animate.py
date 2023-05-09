@@ -5,9 +5,9 @@ from typing import Iterable
 import logo
 import pygame as p
 
-from hexpy.hexpy.hexpy import Hex, HexMap
+from hexpy import Hex, HexMap
 
-ctypes.windll.user32.SetProcessDPIAware()
+# ctypes.windll.user32.SetProcessDPIAware()
 
 
 def draw(surface: p.Surface, hexmaps: Iterable[HexMap], cover: HexMap) -> None:
