@@ -1,4 +1,4 @@
-![hexpy logo](https://github.com/ElisGrahn/hexpy/tree/main/res/logo.gif)
+![hexpy logo](https://github.com/ElisGrahn/hexpy/blob/main/res/logo.gif)
 
 *The logo was created as an 
 [**example**](https://github.com/ElisGrahn/hexpy/tree/main/examples/animate_logo) 
