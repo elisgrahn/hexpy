@@ -1,4 +1,6 @@
-![*hexpy logo*, (created using *hexpy*, PIL and pygame)](https://github.com/ElisGrahn/hexpy/res/logo.gif)
+![*hexpy logo*, (created using *hexpy*, PIL and pygame)](https://github.com/ElisGrahn/hexpy/blob/main/res/logo.gif)
+
+
 
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30" fill="none">
     <text x="0" y="15" fill="#ACD97F">h</text>
