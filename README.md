@@ -14,7 +14,6 @@ The purpose of **hexpy** is to provide a high level library that eases working w
 ## **Usage**
 
 
-
 <!-- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 30" fill="none">
     <text x="0" y="15" fill="#ACD97F">h</text>
     <text x="7" y="15" fill="#7FCCF2">e</text>

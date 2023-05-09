@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from hex import Hex
-from point import Point
+from .hex import Hex
+from .point import Point
 
 
 class HexMap(dict):

@@ -1,91 +1,111 @@
-from hexpy.hexpy.hexpy import Hex, HexMap
+import ctypes
+import math
 
-hexboard: HexMap
-turn: int = 1
+import othexo_functions as othexo
+import pygame as p
 
+from hexpy import Hex, Hexigo, HexMap
 
-def update() -> None:
-    "Update the board, removing old possible positons and creating the new ones"
-
-    def update_in_direction(pos: Hex, dir: Hex, ctr: int = 0) -> None:
-        "Recursively update from position in direction"
-
-        if pos in hexboard.hexes():
-            # Check the next in the direction
-            if hexboard[pos] == -turn:
-                update_in_direction(pos + dir, dir, ctr + 1)
-
-            elif ctr > 0 and hexboard[pos] == 0:
-                hexboard[pos] = 2 * turn
-
-    # Reset all possible positions of the other player
-    for position in hexboard.get_hexes(-2 * turn):
-        hexboard[position] = 0
-
-    # Get all positions belonging to current player
-    for position in hexboard.get_hexes(turn):
-        for i, neighbor in enumerate(position.neighbors()):
-            # Check that it is in the map/board
-            if neighbor in hexboard:
-                update_in_direction(neighbor, position.direction(i))
+# ctypes.windll.user32.SetProcessDPIAware()
 
 
-def flip(position: Hex) -> None:
-    "Flip the board from the position"
+def draw(surface: p.Surface, hexmap: HexMap, red_highlight: Hex | None) -> None:
+    "Draw the hexmap on surface while highlighting red_highlight"
 
-    def flip_in_direction(pos: Hex, dir: Hex, ctr: int = 0) -> None:
-        "Recursively flip from position in direction"
+    min_size = min(Hex.size)
 
-        if pos in hexboard:
-            # Check the next in the direction
-            if hexboard[pos] == -turn:
-                flip_in_direction(pos + dir, dir, ctr + 1)
+    k = 1  # 0.92
 
-            elif ctr > 0 and hexboard[pos] == turn:
-                for to_flip in position.linedraw_to(pos):
-                    hexboard[to_flip] = turn
+    width = math.ceil(k * 0.05 * min_size)
+    radius = math.ceil(k * 0.78 * min_size)
 
-    hexboard[position] = turn
+    for hex, value in hexmap.items():
+        hex: Hex
 
-    for i, neighbor in enumerate(position.neighbors()):
-        flip_in_direction(neighbor, position.direction(i))
+        polygon = tuple(hex.polygon_pixels(k))
+
+        # Draw board hex
+        p.draw.polygon(surface, GREEN, polygon)
+        p.draw.polygon(surface, DARKGREEN, polygon, width)
+
+        if value != 0:
+            center = hex.to_pixel()
+
+            if value == 1:
+                p.draw.circle(surface, WHITE, center, radius)
+                p.draw.circle(surface, GRAY, center, radius, width)
+
+            elif value == -1:
+                p.draw.circle(surface, BLACK, center, radius)
+                p.draw.circle(surface, GRAY, center, radius, width)
+
+            else:  # if value is -2 or 2
+                p.draw.circle(surface, GRAY, center, radius, width)
+
+        if red_highlight != None and hex == red_highlight:
+            p.draw.circle(surface, RED, red_highlight.to_pixel(), 0.2 * radius)
 
 
-def start() -> None:
-    "Call this to start the game"
+GREEN = (57, 140, 61)
+DARKGREEN = (43, 103, 46)
+GRAY = (78, 78, 78)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+BEIGE = (227, 195, 159)
+RED = (255, 0, 0)
 
-    update()
+p.init()
 
+fps = 30
+clock = p.time.Clock()
 
-def check() -> bool:
-    "Check if the current player can place anything"
+width, height = 1280, 960
+screen = p.display.set_mode((width, height))
+p.display.set_caption("Othexo")
 
-    possible_moves = tuple(hexboard.get_hexes(2 * turn))
+# Define our Hexagonal layout
+Hex.set_layout(size=60, origin=(width // 2, height // 2), orientation="pointy")
 
-    if len(possible_moves) == 0:
-        return False
+# Create a HexMap object in the shape of a hexagon
+hexmap = HexMap.hexagon(radius=4, value=0)
+# hexmap = HexMap.diamond(value=0)
 
-    return True
+# Remove Hexigo from the map
+hexmap.pop(Hexigo)
 
+# Set every even neighbor to white and odd to black
+for i, direction in enumerate(Hex.directions()):
+    hexmap[direction] = -1 if i % 2 else 1
 
-def make_move(position: Hex) -> bool:
-    global turn
+for i, direction in enumerate(Hex.directions((0, 3))):
+    hexmap[direction * 2] = 1 if i % 2 else -1
 
-    if position in hexboard.get_hexes(2 * turn):
-        # Flip pieces around the clicked hex
-        flip(position)
+# Initialise othexo
+othexo.hexboard = hexmap
+othexo.start()
 
-        turn *= -1
+latest_move = None
+run = True
+while run:
+    for event in p.event.get():
+        if event.type == p.QUIT:
+            run = False
+            p.quit()
 
-        # Prepare the board for the next turn
-        update()
+        elif event.type == p.MOUSEBUTTONDOWN:
+            clicked = Hex.from_pixel(p.mouse.get_pos())
 
-        if not check():
-            print("can't place")
+            if othexo.make_move(clicked):
+                latest_move = clicked
 
-            turn *= -1
-            update()
+    if not run:
+        break
 
-        return True
+    # update the game
+    screen.fill(BEIGE)
 
-    return False
+    # draw hexagons
+    draw(screen, hexmap, latest_move)
+
+    p.display.flip()
+    clock.tick(fps)
