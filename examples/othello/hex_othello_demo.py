@@ -4,7 +4,7 @@ import math
 import pygame as p
 
 import examples.othello.othexo as othexo
-from src.hexpy.hexpy import Hex, Hexigo, HexMap
+from hexpy.hexpy.hexpy import Hex, Hexigo, HexMap
 
 ctypes.windll.user32.SetProcessDPIAware()
 
