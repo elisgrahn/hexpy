@@ -1,6 +1,6 @@
-from hexpy import Hex, HexMap
+from hexpy import Hex, hexmap
 
-hexboard: HexMap
+hexboard: hexmap.HexMap
 turn: int = 1
 
 

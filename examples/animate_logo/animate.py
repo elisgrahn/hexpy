@@ -5,12 +5,14 @@ from typing import Iterable
 import logo
 import pygame as p
 
-from hexpy import Hex, HexMap
+from hexpy import Hex, hexmap
 
 # ctypes.windll.user32.SetProcessDPIAware()
 
 
-def draw(surface: p.Surface, hexmaps: Iterable[HexMap], cover: HexMap) -> None:
+def draw(
+    surface: p.Surface, hexmaps: Iterable[hexmap.HexMap], cover: hexmap.HexMap
+) -> None:
     "Draw the hexmaps on surface"
 
     min_size = min(Hex.size)
@@ -74,7 +76,7 @@ Hex.set_layout(size=40, origin=(width // 2, height // 2), orientation="flat")
 
 letters = logo.animation(0)
 
-cover = HexMap.hexagon(1, WHITE)
+cover = hexmap.hexagon(1, WHITE)
 
 clock = p.time.Clock()
 fps = 6
@@ -91,9 +93,6 @@ while run:
         # letters = logo.animation(counter, letters)
         # counter += 1
         # p.image.save(screen, f"logo_gif/frame_{counter}.png")
-
-    if not run:
-        break
 
     # update
     screen.fill(WHITE)

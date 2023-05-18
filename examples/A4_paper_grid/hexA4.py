@@ -3,13 +3,13 @@
 import pygame as p
 from pygame import gfxdraw
 
-from hexpy import Hex, HexMap
+from hexpy import Hex, hexmap
 
 # Following line is for windows not to duplicate window size
 # ctypes.windll.user32.SetProcessDPIAware()
 
 
-def draw(surface: p.Surface, hexmap: HexMap, k: int = 1) -> None:
+def draw(surface: p.Surface, hexmap: hexmap.HexMap, k: int = 1) -> None:
     """Draw the hexmap on surface
     :param surface: The pygame surface to draw on
     :param hexmap: The HexMap object to draw
@@ -40,7 +40,7 @@ p.display.set_caption("Hexagonal A4")
 Hex.set_layout(size=12, origin=(width // 2, height // 2), orientation="pointy")
 
 # Create a HexMap object in the shape of a hexagon
-hexmap = HexMap.hexagon(radius=50, value=0)
+hexmap = hexmap.hexagon(radius=50, value=0)
 
 run = True
 while run:

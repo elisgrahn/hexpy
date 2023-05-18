@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Iterable
 from itertools import cycle, islice
 from typing import Any
@@ -136,6 +137,10 @@ class Hex:
 
         return len(self - other)
 
+    def __neg__(self) -> Hex:
+        "Negate the values of self, effectively flipping it around Hexigo"
+        return Hex(-self.q, -self.r, -self.s)
+
     def __add__(self, other: Hex) -> Hex:
         "Add Hex with another Hex"
 
@@ -146,15 +151,27 @@ class Hex:
 
         return Hex(self.q + other.q, self.r + other.r)
 
+    __radd__ = __add__
+
     def __sub__(self, other: Hex) -> Hex:
-        "Subtract Hex by another Hex"
+        "Subtract self by others"
 
         if not isinstance(other, Hex):
             raise TypeError(
                 f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
             )
 
-        return Hex(self.q - other.q, self.r - other.r)
+        return self + -other
+
+    def __rsub__(self, other: Hex) -> Hex:
+        "Subtract other by self"
+
+        if not isinstance(other, Hex):
+            raise TypeError(
+                f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
+            )
+
+        return other + -self
 
     def __mul__(self, k: int | float) -> Hex:
         "Multiplicate Hex by factor k"
@@ -166,8 +183,10 @@ class Hex:
 
         return Hex(self.q * k, self.r * k)
 
+    __rmul__ = __mul__
+
     def __truediv__(self, d: int | float) -> Hex:
-        "Divide Hex by divisor d"
+        "Divide self by divisor d"
 
         if not isinstance(d, (int, float)):
             raise TypeError(
@@ -202,10 +221,6 @@ class Hex:
         "Check if Hex has n as a coord"
 
         return n in self.cube_coords
-
-    def __neg__(self) -> Hex:
-        "Negate the values of self, effectively flipping it around Hexigo"
-        return Hex(-self.q, -self.r, -self.s)
 
     def __lshift__(self, input: int | Hex | tuple[Hex, int]) -> Hex:
         """Convienience function for rotate_left() and rotate_left_around()"""
@@ -438,40 +453,39 @@ class Hex:
 
         return self * (1.0 - t) + other * t
 
-        # return Hex(
-        #     self.q * (1.0 - t) + other.q * t,
-        #     self.r * (1.0 - t) + other.r * t,
-        #     self.s * (1.0 - t) + other.s * t,
-        # )
+    def nudge(self) -> Hex:
+        """Nudge self in order to have better consistency when landing between two grid points after lerping"""
+
+        return Hex(self.q + 1e-06, self.r + 1e-06, self.s - 2e-06)
 
     def linedraw_to(self, other: Hex) -> Iterable[Hex]:
-        "Yield all Hexes amongst a line between self and other"
+        """Yield all Hexes amongst a line between self and other"""
 
         # Number of hexes that will be reqired
-        N = self.distance_to(other)
+        steps = self.distance_to(other)
 
-        nudged_self = Hex(self.q + 1e-06, self.r + 1e-06, self.s - 2e-06)
-        nudged_other = Hex(other.q + 1e-06, other.r + 1e-06, other.s - 2e-06)
+        nudged_self = self.nudge()
+        nudged_other = other.nudge()
 
-        step_size = 1.0 / max(N, 1)
-        for i in range(0, N + 1):
+        step_size = 1.0 / max(steps, 1)
+        for i in range(0, steps + 1):
             yield round(nudged_self.lerp_to(nudged_other, i * step_size))
 
     def to_pixel(self) -> Point:
-        "Return pixel at the center of self"
-        return round(self.center_point())
+        """Return pixel at the center of self"""
+        return round(self.to_point())
 
-    def center_point(self) -> Point:
-        "Return the exact center point of self, without rounding the results"
+    def to_point(self) -> Point:
+        """Return the exact center point of self, without rounding the results"""
 
         # TODO add check to warn if a layout hasn't been defined
 
         transformed = Point(*np.matmul(self.forward, np.array([self.q, self.r])))
 
-        return round(transformed * self.size + self.origin)
+        return transformed * self.size + self.origin
 
     def corner_offset(self, idx: int) -> Point:
-        "Return corner offset from center of hex at index idx"
+        """Return corner offset from center of hex at index idx"""
 
         angle = 2.0 * math.pi * (self.start_angle - idx) / 6.0
         trig_vec = Point(math.cos(angle), math.sin(angle))
@@ -479,18 +493,44 @@ class Hex:
         return trig_vec * self.size
 
     def polygon_pixels(self, factor: float = 1) -> Iterable[Point]:
-        "Yeild all pixels forming self as a polygon"
+        """Yeild all pixels forming self as a polygon
+        :param factor: Shrink size of Hex with factor
+        """
 
-        center = self.center_point()
+        center = self.to_point()
 
         for i in range(6):
             offset = self.corner_offset(i)
 
             yield round(center + offset * factor)
 
+    def polygon_points(self, factor: float = 1) -> Iterable[Point]:
+        """Yeild all exact points forming self as a polygon
+        :param factor: Shrink size of Hex by factor
+        """
+
+        # TODO POLYGON POINTS SHOULD RETURN FLIPPED y
+
+        center = self.to_point()
+
+        for i in range(6):
+            offset = self.corner_offset(i)
+
+            yield center + offset * factor
+
+    def coordinate_range(self, steps: int) -> Iterable[Hex]:
+        """Get all hexes within a certain range from self"""
+
+        for q in range(-steps, steps + 1):
+            start = max(-steps, -q - steps)
+            stop = min(+steps, -q + steps)
+
+            for r in range(start, stop + 1):
+                yield self + Hex(q, r)
+
     @classmethod
     def from_pixel(cls, pixel: Point | tuple[int | float, int | float]) -> Hex:
-        "Return the Hex closest to the provided Point"
+        """Return the Hex closest to the provided Point"""
 
         pixel = (Point(*pixel) - cls.origin) / cls.size
 
@@ -509,7 +549,7 @@ class Hex:
 
         :param size: The pixel size of hexagons. If an int is provided hexagons will be regular, otherwise they can be stretched
         :param origin: The pixel origin, i.e. at what Pixel Hexigo will be
-        :param orientation: The orientation of hexagons. Either "pointy" ⬢ or "flat" ⬣.
+        :param orientation: The orientation of hexagons. Either ``pointy`` ⬢ or ``flat`` ⬣.
         """
 
         cls.origin = Point(*origin)
@@ -544,7 +584,7 @@ class Hex:
 
     @classmethod
     def pointy(cls) -> None:
-        "Define grid metadata for pointy orientation"
+        """Define grid metadata for pointy orientation"""
 
         cls.start_angle = 0.5
 
@@ -558,7 +598,7 @@ class Hex:
 
     @classmethod
     def flat(cls) -> None:
-        "Define grid metadata for flat orientation"
+        """Define grid metadata for flat orientation"""
 
         cls.start_angle = 0
 
@@ -569,6 +609,51 @@ class Hex:
 
         # Used to calculate pixel to hex
         cls.backward = ((2 / 3, 0), (-1 / 3, sqrt3 / 3))
+
+    def plot(self, color: Any | None = None) -> None:
+        """Plot the Hex using
+        :param color: Optional color for Hex
+        :returns: None
+        """
+
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import RegularPolygon
+
+        except ImportError as e:
+            warnings.warn(str(e), RuntimeWarning)
+            raise
+
+        fig, ax = plt.subplots()
+        ax.set_aspect("equal")
+        ax.set_title(str(self))
+
+        # TODO CHECK THE LAYOUT
+        Hex.set_layout(1, (0, 0), "pointy")
+
+        # Use the color specified
+        if color == None:
+            color = "black"
+
+        point = self.to_point()
+
+        hex_polygon = RegularPolygon(
+            point,
+            numVertices=6,
+            radius=Hex.size.x,
+            orientation=math.pi * (Hex.start_angle + 0.5),
+            facecolor=color,
+            alpha=0.5,
+            edgecolor="k",
+        )
+
+        ax.add_patch(hex_polygon)
+        ax.scatter(point.x, point.y, c="black", alpha=0)
+
+        # Also add a text label
+        # ax.text(point.x, point.y, value, ha="center", va="center", size=10)
+
+        plt.show()
 
 
 Hexigo = Hex(0, 0)

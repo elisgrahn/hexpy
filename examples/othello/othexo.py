@@ -98,9 +98,6 @@ while run:
             if othexo.make_move(clicked):
                 latest_move = clicked
 
-    if not run:
-        break
-
     # update the game
     screen.fill(BEIGE)
 
