@@ -5,15 +5,17 @@ from typing import Iterable
 import logo
 import pygame as p
 
-from hexpy import Hex, HexMap
+from hexpy import Hex, hexmap
 
 # ctypes.windll.user32.SetProcessDPIAware()
 
 
-def draw(surface: p.Surface, hexmaps: Iterable[HexMap], cover: HexMap) -> None:
+def draw(
+    surface: p.Surface, hexmaps: Iterable[hexmap.HexMap], cover: hexmap.HexMap
+) -> None:
     "Draw the hexmaps on surface"
 
-    min_size = min(Hex.size)
+    min_size = min(hex.size)
 
     k = 0.9
 
@@ -21,19 +23,19 @@ def draw(surface: p.Surface, hexmaps: Iterable[HexMap], cover: HexMap) -> None:
 
     h_map, e_map, x_map, p_map, y_map = hexmaps
 
-    h_map += Hex.diagonal() * -6
-    e_map += Hex.diagonal() * -3
-    p_map += Hex.diagonal() * 3
-    y_map += Hex.diagonal() * 6
+    h_map += hex.diagonal() * -6
+    e_map += hex.diagonal() * -3
+    p_map += hex.diagonal() * 3
+    y_map += hex.diagonal() * 6
 
-    e_cover = cover + Hex.diagonal() * -2
-    p_cover = cover + Hex.diagonal() * 2
+    e_cover = cover + hex.diagonal() * -2
+    p_cover = cover + hex.diagonal() * 2
 
     ordered_letters = (h_map, y_map, e_cover, e_map, p_cover, p_map, cover, x_map)
 
     for i, letter in enumerate(ordered_letters):
         for hex, color in letter.items():
-            hex: Hex
+            hex: hex
 
             polygon = tuple(hex.polygon_pixels(k))
 
@@ -74,7 +76,7 @@ Hex.set_layout(size=40, origin=(width // 2, height // 2), orientation="flat")
 
 letters = logo.animation(0)
 
-cover = HexMap.hexagon(1, WHITE)
+cover = hexmap.hexagon(1, WHITE)
 
 clock = p.time.Clock()
 fps = 6
@@ -91,9 +93,6 @@ while run:
         # letters = logo.animation(counter, letters)
         # counter += 1
         # p.image.save(screen, f"logo_gif/frame_{counter}.png")
-
-    if not run:
-        break
 
     # update
     screen.fill(WHITE)

@@ -1,6 +1,6 @@
 import time
 
-from hexpy import Hex, Hexigo, HexMap
+from hexpy import Hex, Hexigo, hexmap
 
 Q_GREEN = (172, 217, 127)
 R_BLUE = (127, 204, 242)
@@ -10,22 +10,16 @@ Y_YELLOW = (255, 211, 66)
 
 
 def animation(
-    frame: int, hexmaps: tuple[HexMap, ...] | None = None
-) -> tuple[HexMap, ...]:
+    frame: int, hexmaps: tuple[hexmap, ...] | None = None
+) -> tuple[hexmap, ...]:
     """Animate hexpy logo"""
 
     if frame == 0 or hexmaps == None:
-        h = HexMap.hexagon(radius=2, value=Q_GREEN, hollow=True)
-        e = HexMap.hexagon(radius=2, value=R_BLUE, hollow=True)
-        x = HexMap.hexagon(radius=2, value=S_PINK, hollow=True)
-        p = HexMap.hexagon(radius=2, value=P_BLUE, hollow=True)
-        y = HexMap.hexagon(radius=2, value=Y_YELLOW, hollow=True)
-
-        h.default_value = Q_GREEN
-        e.default_value = R_BLUE
-        x.default_value = S_PINK
-        p.default_value = P_BLUE
-        y.default_value = Y_YELLOW
+        h = hexmap.hexagon(radius=2, value=Q_GREEN, hollow=True)
+        e = hexmap.hexagon(radius=2, value=R_BLUE, hollow=True)
+        x = hexmap.hexagon(radius=2, value=S_PINK, hollow=True)
+        p = hexmap.hexagon(radius=2, value=P_BLUE, hollow=True)
+        y = hexmap.hexagon(radius=2, value=Y_YELLOW, hollow=True)
 
         h += Hex.diagonal() * 6
         e += Hex.diagonal() * 3
@@ -79,64 +73,64 @@ def animation(
     elif frame == -4:
         h.pop(Hex.diagonal(-1))
         h.pop(Hex.diagonal(-2))
-        h.add(Hex.diagonal() + Hex.direction(-1) * 2)
-        h.add(Hex.diagonal(3) + Hex.direction(-1) * 2)
-        h.add(Hex.diagonal(3) + Hex.direction(2) * 2)
+        h.set(Hex.diagonal() + Hex.direction(-1) * 2)
+        h.set(Hex.diagonal(3) + Hex.direction(-1) * 2)
+        h.set(Hex.diagonal(3) + Hex.direction(2) * 2)
 
         e.pop(Hex.diagonal())
-        e.add(Hex.direction(1))
+        e.set(Hex.direction(1))
 
         x.pop(Hex.diagonal(1))
         x.pop(Hex.diagonal(2))
         x += Hex.direction(2)
-        x.add(Hex.diagonal(-1))
-        x.add(Hex.diagonal(-2))
+        x.set(Hex.diagonal(-1))
+        x.set(Hex.diagonal(-2))
 
-        p.add(Hex.direction(-2) * 2 + Hex.direction(-1))
+        p.set(Hex.direction(-2) * 2 + Hex.direction(-1))
 
         y.pop(Hex.diagonal(1))
         y.pop(Hex.diagonal(2))
-        y.add(Hex.diagonal() + Hex.direction(2) * 2)
-        y.add(Hex.diagonal(3) + Hex.direction(2) * 2)
-        y.add(Hex.diagonal() + Hex.direction(-1) * 2)
+        y.set(Hex.diagonal() + Hex.direction(2) * 2)
+        y.set(Hex.diagonal(3) + Hex.direction(2) * 2)
+        y.set(Hex.diagonal() + Hex.direction(-1) * 2)
 
     elif frame == -3:
-        h.add(Hex.diagonal(3) + Hex.direction(2) * 3)
+        h.set(Hex.diagonal(3) + Hex.direction(2) * 3)
 
-        e.add(Hexigo)
+        e.set(Hexigo)
 
-        x.add(Hex.diagonal() + Hex.direction(-1) * 2)
-        x.add(Hex.diagonal(3) + Hex.direction(-1) * 2)
+        x.set(Hex.diagonal() + Hex.direction(-1) * 2)
+        x.set(Hex.diagonal(3) + Hex.direction(-1) * 2)
 
-        p.add(Hex.diagonal(3) + Hex.direction(-1) * 3)
+        p.set(Hex.diagonal(3) + Hex.direction(-1) * 3)
 
-        y.add(Hex.diagonal() + Hex.direction(-1) * 3)
-        y.add(Hex.diagonal() + Hex.direction(-1) * 4)
+        y.set(Hex.diagonal() + Hex.direction(-1) * 3)
+        y.set(Hex.diagonal() + Hex.direction(-1) * 4)
 
     elif frame == -2:
-        h.add(Hex.diagonal(3) + Hex.direction(2) * 4)
+        h.set(Hex.diagonal(3) + Hex.direction(2) * 4)
 
-        e.add(Hex.direction(3))
+        e.set(Hex.direction(3))
 
         x.pop(Hex.diagonal() + Hex.direction(2) * 2)
         x.pop(Hex.diagonal(3) + Hex.direction(2) * 2)
         x += Hex.direction(2)
-        x.add(Hex.diagonal() + Hex.direction(-1) * 2)
-        x.add(Hex.diagonal(3) + Hex.direction(-1) * 2)
+        x.set(Hex.diagonal() + Hex.direction(-1) * 2)
+        x.set(Hex.diagonal(3) + Hex.direction(-1) * 2)
 
-        p.add(Hex.diagonal(3) + Hex.direction(-1) * 4)
+        p.set(Hex.diagonal(3) + Hex.direction(-1) * 4)
 
-        y.add(Hex.direction() + Hex.direction(-1) * 4)
-        y.add(Hex.direction(-1) * 5)
+        y.set(Hex.direction() + Hex.direction(-1) * 4)
+        y.set(Hex.direction(-1) * 5)
 
     # FINISHED LOGO
     elif frame == -1:
-        h.add(Hex.diagonal(3) + Hex.direction(2) * 5)
+        h.set(Hex.diagonal(3) + Hex.direction(2) * 5)
 
-        p.add(Hex.diagonal(3) + Hex.direction(-1) * 5)
+        p.set(Hex.diagonal(3) + Hex.direction(-1) * 5)
 
-        y.add(Hex.direction(-2) + Hex.direction(-1) * 4)
-        y.add(Hex.diagonal(3) + Hex.direction(-1) * 4)
+        y.set(Hex.direction(-2) + Hex.direction(-1) * 4)
+        y.set(Hex.diagonal(3) + Hex.direction(-1) * 4)
 
     elif frame == 0:
         time.sleep(0.5)
@@ -158,8 +152,8 @@ def animation(
         x.pop(Hex.diagonal() + Hex.direction(2) * 2)
         x.pop(Hex.diagonal(3) + Hex.direction(2) * 2)
         x += Hex.direction(2)
-        x.add(Hex.diagonal() + Hex.direction(-1) * 2)
-        x.add(Hex.diagonal(3) + Hex.direction(-1) * 2)
+        x.set(Hex.diagonal() + Hex.direction(-1) * 2)
+        x.set(Hex.diagonal(3) + Hex.direction(-1) * 2)
 
         p.pop(Hex.diagonal(3) + Hex.direction(-1) * 4)
 
@@ -180,35 +174,35 @@ def animation(
         y.pop(Hex.diagonal() + Hex.direction(-1) * 4)
 
     elif frame == 4:
-        h.add(Hex.diagonal(-1))
-        h.add(Hex.diagonal(-2))
+        h.set(Hex.diagonal(-1))
+        h.set(Hex.diagonal(-2))
         h.pop(Hex.diagonal() + Hex.direction(-1) * 2)
         h.pop(Hex.diagonal(3) + Hex.direction(-1) * 2)
         h.pop(Hex.diagonal(3) + Hex.direction(2) * 2)
 
-        e.add(Hex.diagonal())
+        e.set(Hex.diagonal())
         e.pop(Hex.direction(1))
 
         x.pop(Hex.diagonal(1))
         x.pop(Hex.diagonal(2))
         x += Hex.direction(2)
-        x.add(Hex.diagonal(-1))
-        x.add(Hex.diagonal(-2))
+        x.set(Hex.diagonal(-1))
+        x.set(Hex.diagonal(-2))
 
         p.pop(Hex.direction(-2) * 2 + Hex.direction(-1))
 
-        y.add(Hex.diagonal(1))
-        y.add(Hex.diagonal(2))
+        y.set(Hex.diagonal(1))
+        y.set(Hex.diagonal(2))
         y.pop(Hex.diagonal() + Hex.direction(2) * 2)
         y.pop(Hex.diagonal(3) + Hex.direction(2) * 2)
         y.pop(Hex.diagonal() + Hex.direction(-1) * 2)
 
     elif frame == 5:
-        h.add(Hex.direction(-1) * 2)
+        h.set(Hex.direction(-1) * 2)
 
-        x.add(Hex.direction(-1) * 2)
+        x.set(Hex.direction(-1) * 2)
 
-        y.add(Hex.direction(2) * 2)
+        y.set(Hex.direction(2) * 2)
 
     elif frame == 6:
         h += Hex.diagonal()

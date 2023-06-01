@@ -3,13 +3,13 @@
 import pygame as p
 from pygame import gfxdraw
 
-from hexpy import Hex, HexMap
+from hexpy import Hex, hexmap
 
 # Following line is for windows not to duplicate window size
 # ctypes.windll.user32.SetProcessDPIAware()
 
 
-def draw(surface: p.Surface, hexmap: HexMap, k: int = 1) -> None:
+def draw(surface: p.Surface, hexmap: hexmap.HexMap, k: int = 1) -> None:
     """Draw the hexmap on surface
     :param surface: The pygame surface to draw on
     :param hexmap: The HexMap object to draw
@@ -32,15 +32,16 @@ fps = 1
 clock = p.time.Clock()
 
 # A4 ratio
-width, height = 297 * 5, 210 * 5
+width, height = 297 * 4, 210 * 4
 screen = p.display.set_mode((width, height))
 p.display.set_caption("Hexagonal A4")
 
 # Define our Hexagonal layout
-Hex.set_layout(size=12, origin=(width // 2, height // 2), orientation="pointy")
+Hex.pointy_layout(size=12, origin=(width // 2, height // 2))
 
 # Create a HexMap object in the shape of a hexagon
-hexmap = HexMap.hexagon(radius=50, value=0)
+# TODO when implemented use rectangle instead!
+hxmp = hexmap.hexagon(radius=50, value=0)
 
 run = True
 while run:
@@ -49,13 +50,13 @@ while run:
             run = False
 
         elif event.type == p.MOUSEBUTTONDOWN:
-            p.image.save(screen, f"A4_paper_grid.png")
+            p.image.save(screen, "A4_paper_grid.png")
 
     # update the game
     screen.fill(WHITE)
 
     # draw hexagons
-    draw(screen, hexmap)
+    draw(screen, hxmp)
 
     p.display.flip()
     clock.tick(fps)
