@@ -15,7 +15,7 @@ def draw(
 ) -> None:
     "Draw the hexmaps on surface"
 
-    min_size = min(Hex.size)
+    min_size = min(hex.size)
 
     k = 0.9
 
@@ -23,19 +23,19 @@ def draw(
 
     h_map, e_map, x_map, p_map, y_map = hexmaps
 
-    h_map += Hex.diagonal() * -6
-    e_map += Hex.diagonal() * -3
-    p_map += Hex.diagonal() * 3
-    y_map += Hex.diagonal() * 6
+    h_map += hex.diagonal() * -6
+    e_map += hex.diagonal() * -3
+    p_map += hex.diagonal() * 3
+    y_map += hex.diagonal() * 6
 
-    e_cover = cover + Hex.diagonal() * -2
-    p_cover = cover + Hex.diagonal() * 2
+    e_cover = cover + hex.diagonal() * -2
+    p_cover = cover + hex.diagonal() * 2
 
     ordered_letters = (h_map, y_map, e_cover, e_map, p_cover, p_map, cover, x_map)
 
     for i, letter in enumerate(ordered_letters):
         for hex, color in letter.items():
-            hex: Hex
+            hex: hex
 
             polygon = tuple(hex.polygon_pixels(k))
 

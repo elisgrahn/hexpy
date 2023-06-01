@@ -4,45 +4,40 @@ import math
 import othexo_functions as othexo
 import pygame as p
 
-from hexpy import Hex, Hexigo, HexMap
+from hexpy import Hex, Hexigo, hexmap
 
-# ctypes.windll.user32.SetProcessDPIAware()
+ctypes.windll.user32.SetProcessDPIAware()
 
 
-def draw(surface: p.Surface, hexmap: HexMap, red_highlight: Hex | None) -> None:
+def draw(surface: p.Surface, hxmp: hexmap.HexMap, red_highlight: Hex | None) -> None:
     "Draw the hexmap on surface while highlighting red_highlight"
 
-    min_size = min(Hex.size)
+    min_size = min(Hex.layout.size)
 
     k = 1  # 0.92
 
     width = math.ceil(k * 0.05 * min_size)
     radius = math.ceil(k * 0.78 * min_size)
 
-    for hex, value in hexmap.items():
-        hex: Hex
-
-        polygon = tuple(hex.polygon_pixels(k))
+    for hx, value in hxmp.items():
+        polygon = tuple(hx.polygon_pixels(k))
 
         # Draw board hex
         p.draw.polygon(surface, GREEN, polygon)
         p.draw.polygon(surface, DARKGREEN, polygon, width)
 
         if value != 0:
-            center = hex.to_pixel()
+            center = hx.to_pixel()
 
             if value == 1:
                 p.draw.circle(surface, WHITE, center, radius)
-                p.draw.circle(surface, GRAY, center, radius, width)
 
             elif value == -1:
                 p.draw.circle(surface, BLACK, center, radius)
-                p.draw.circle(surface, GRAY, center, radius, width)
 
-            else:  # if value is -2 or 2
-                p.draw.circle(surface, GRAY, center, radius, width)
+            p.draw.circle(surface, GRAY, center, radius, width)
 
-        if red_highlight != None and hex == red_highlight:
+        if red_highlight != None and hx == red_highlight:
             p.draw.circle(surface, RED, red_highlight.to_pixel(), 0.2 * radius)
 
 
@@ -64,25 +59,29 @@ screen = p.display.set_mode((width, height))
 p.display.set_caption("Othexo")
 
 # Define our Hexagonal layout
-Hex.set_layout(size=60, origin=(width // 2, height // 2), orientation="pointy")
+Hex.pointy_layout(size=60, origin=(width // 2, height // 2))
 
 # Create a HexMap object in the shape of a hexagon
-hexmap = HexMap.hexagon(radius=4, value=0)
+hxmp = hexmap.hexagon(radius=4, value=0)
 # hexmap = HexMap.diamond(value=0)
 
 # Remove Hexigo from the map
-hexmap.pop(Hexigo)
+hxmp.pop(Hexigo)
 
 # Set every even neighbor to white and odd to black
-for i, direction in enumerate(Hex.directions()):
-    hexmap[direction] = -1 if i % 2 else 1
+for i, direction in enumerate(Hexigo.directions):
+    hxmp[direction] = -1 if i % 2 else 1
 
-for i, direction in enumerate(Hex.directions((0, 3))):
-    hexmap[direction * 2] = 1 if i % 2 else -1
+for i, direction in enumerate(Hex.clock[9, 3]):
+    hxmp[direction * 2] = 1 if i % 2 else -1
 
 # Initialise othexo
-othexo.hexboard = hexmap
+othexo.hexboard = hxmp
 othexo.start()
+
+hxmp.plot(
+    {0: "green", 1: "white", -1: "black", 2: "gray", -2: "gray"}, facecolor="brown"
+)
 
 latest_move = None
 run = True
@@ -102,7 +101,7 @@ while run:
     screen.fill(BEIGE)
 
     # draw hexagons
-    draw(screen, hexmap, latest_move)
+    draw(screen, hxmp, latest_move)
 
     p.display.flip()
     clock.tick(fps)

@@ -1,8 +1,10 @@
 import ctypes
+import math
 
 import pygame as p
+from PIL import Image
 
-from hexpy import Hex, hexmap
+from hexpy import Hex, hexclock, hexlayout, hexmap
 
 ctypes.windll.user32.SetProcessDPIAware()
 
@@ -11,12 +13,12 @@ GRAY = (100, 100, 100)
 BLACK = (0, 0, 0)
 
 
-def draw(surface: p.Surface, hexmap: hexmap) -> None:
+def draw(surface: p.Surface, hexmap: hexmap.HexMap) -> None:
     "Draw the hexmaps on surface"
 
-    min_size = min(Hex.size)
+    # min_size = min(Hex.layout.size)
 
-    k = 0.95
+    k = 0.9
 
     for hex, color in hexmap.hexes_and_values():
         polygon = tuple(hex.polygon_pixels(k))
@@ -24,7 +26,9 @@ def draw(surface: p.Surface, hexmap: hexmap) -> None:
         p.draw.polygon(surface, color, polygon)
 
 
-def click(hexmap: hexmap, clicked_hex: Hex, initial: tuple[int, int, int]) -> hexmap:
+def click(
+    hexmap: hexmap.HexMap, clicked_hex: Hex, initial: tuple[int, int, int]
+) -> hexmap.HexMap:
     """Flip the clicked Hex in hexmap"""
 
     # Flip the color
@@ -34,17 +38,17 @@ def click(hexmap: hexmap, clicked_hex: Hex, initial: tuple[int, int, int]) -> he
     return hexmap
 
 
-def update(hexmap: hexmap) -> hexmap:
+def update(board: hexmap.HexMap, r: int) -> hexmap.HexMap:
     """Update the game of life HexMap"""
 
-    new_hexmap = hexmap.hexagon(radius=5, value=BLACK)
+    new_hexmap = board.copy()
+    new_hexmap.set_all(BLACK)
 
-    for hex in hexmap.hexes():
-        # Count the number of living neighbors
-        ctr = 0
-        for neighbor in hex.neighbors():
-            if neighbor in hexmap and hexmap[neighbor] == WHITE:
-                ctr += 1
+    for hex in board.hexes():
+        ctr = sum(
+            neighbor in board and board[neighbor] == WHITE
+            for neighbor in hex.direct_neighbors
+        )
 
         if ctr == 2:
             new_hexmap.set(hex, WHITE)
@@ -52,20 +56,36 @@ def update(hexmap: hexmap) -> hexmap:
     return new_hexmap
 
 
-p.init()
+width = 1200
+height = round((math.sqrt(3) / 2) * width)
 
-width, height = 1280, 960
+r = 20
+s = round((height / ((r + 1) * 2)) * 2 / 3)
+
+p.init()
 screen = p.display.set_mode((width, height), 0, 32)
-p.display.set_caption("Othexo")
+p.display.set_caption("Hexagonal Game of Life")
 
 # Define our Hexagonal layout
-Hex.set_layout(size=50, origin=(width // 2, height // 2), orientation="pointy")
+# Hex.layout = hexlayout.pointy(size=s, origin=(width // 2, height // 2))
+# Hex.clock = hexclock.pointy()
+
+Hex.pointy_layout(size=s, origin=(width // 2, height // 2))
+# Hex.flat_layout(size=s, origin=(width // 2, height // 2))
+# Hex.custom_layout(
+#     size=s, origin=(width // 2, height // 2), orientation=hexlayout.Orientation()
+# )
+
 
 # Create a HexMap object in the shape of a hexagon
-board = hexmap.hexagon(radius=5, value=BLACK)
+board = hexmap.hexagon(radius=r, value=BLACK)
+
+board += hexmap.hexagon(radius=r, value=WHITE, hollow=True)
+
+# board.plot(factor=0.9)
 
 clock = p.time.Clock()
-fps = 30
+fps = 60
 
 initial = BLACK
 frame = 0
@@ -82,12 +102,17 @@ while run:
             if event.key == p.K_SPACE:
                 play = not play
 
+            elif event.key == p.K_c:
+                board.set_all(value=BLACK)
+
         elif not play:
             if event.type == p.MOUSEBUTTONDOWN:
                 clicked = Hex.from_pixel(p.mouse.get_pos())
-                initial = board[clicked]
-                board = click(board, clicked, initial)
-                clicking = True
+
+                if clicked in board:
+                    initial = board[clicked]
+                    board = click(board, clicked, initial)
+                    clicking = True
 
             elif clicking and event.type == p.MOUSEMOTION:
                 clicked = Hex.from_pixel(p.mouse.get_pos())
@@ -98,7 +123,7 @@ while run:
                 clicking = False
 
     if play and frame % 6 == 0:
-        board = update(board)
+        board = update(board, r)
         frame = 1
 
     # update

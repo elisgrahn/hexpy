@@ -5,6 +5,7 @@ dev/
 *test.py
 tests
 /res/hidden/
+example_google.py
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
