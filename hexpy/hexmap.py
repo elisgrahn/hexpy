@@ -36,7 +36,7 @@ Examples:
 
     Set Hex(1, 2, -3) to '(3, "house") in loaded HexMap,
 
-    >>> hxmp.set(Hex(1, 2), value=(3, "house"))
+    >>> hxmp.insert(Hex(1, 2), value=(3, "house"))
 
     The above is the same as
     >>> hxmp[Hex(1, 2)] = (3, "house")
@@ -53,6 +53,7 @@ import builtins
 import pickle
 import warnings
 from collections.abc import Iterable, Set
+from math import floor
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -267,8 +268,7 @@ class HexMap(dict):
         """
 
         if isinstance(__key, Hex):
-            # When running pickle.load self.hexorigin hasn't been defined yet, therefore the if expression
-
+            # When running pickle.load self.hexorigin hasn't been defined yet, therefore the inline if expression
             super().__setitem__(
                 __key + self.hexorigin if hasattr(self, "hexorigin") else Hexigo,
                 __value,
@@ -310,8 +310,8 @@ class HexMap(dict):
                 f"Argument __key was provided {__key} of type {type(__key)} which is neither a Hex nor a HexMap"
             )
 
-    def set(self, hex_or_hexmap: Hex | HexMap, value: Any = None) -> None:
-        """Set a Hex or whole HexMap in this HexMap with an optional value otherwise set to default value
+    def insert(self, hex_or_hexmap: Hex | HexMap, value: Any = None) -> None:
+        """Insert a Hex or whole HexMap in this HexMap with an optional value otherwise set to default value
 
         Args:
             hex_or_hexmap (Hex | HexMap): Set a specific Hex in this HexMap or all Hexes from another HexMap
@@ -356,7 +356,7 @@ class HexMap(dict):
         """
 
         if isinstance(other, HexMap):
-            return self._new({**self, **other})
+            return self._new({**other, **self})
 
         else:
             raise TypeError(
@@ -598,7 +598,7 @@ class HexMap(dict):
         fig.tight_layout()
         ax.invert_yaxis()
         ax.set_aspect("equal")
-        ax.set_title("title")
+        ax.set_title(title)
 
         if facecolor is not None:
             ax.set_facecolor(facecolor)
@@ -668,6 +668,9 @@ class HexMap(dict):
         plt.show()
 
 
+# NOTE ALL OF THE BELOW IS STILL WORK IN PROGRESS!
+
+
 def hexagon(
     radius: int,
     value: Any = None,
@@ -696,51 +699,212 @@ def hexagon(
 
         if not hollow or q == -radius or q == radius:
             for r in range(r1, r2 + 1):
-                hxmp.set(Hex(q, r))
+                hxmp.insert(Hex(q, r))
 
         else:
-            hxmp.set(Hex(q, r1))
-            hxmp.set(Hex(q, r2))
+            hxmp.insert(Hex(q, r1))
+            hxmp.insert(Hex(q, r2))
 
     return hxmp
 
 
-# def parallelogram(value: Any = None) -> HexMap:
-#     """Create a HexMap in the shape of a Parallelogram ▰
-#     :param radius: The number of hexes from the center
-#     :param value: The value that should be assigned to all Hexagons
-#     :return: The parallelogram HexMap"""
+def _axrange(r: int | tuple[int, int]):
+    """Internal TODO
 
-#     axes: dict[str, int | tuple[int, int]] = {"q": (1, 2), "r": (1, 2)}
+    Args:
+        r (int | tuple[int, int]): _description_
 
-#     hxmp = HexMap(default_value=value, origin_offset=hexorigin)
-
-#     for q in range(-radius, radius + 1):
-#         r1 = max(-radius, -q - radius)
-#         r2 = min(radius, -q + radius)
-
-#         if not hollow or q == -radius or q == radius:
-#             for r in range(r1, r2 + 1):
-#                 hxmp.set(Hex(q, r))
-
-#         else:
-#             hxmp.set(Hex(q, r1))
-#             hxmp.set(Hex(q, r2))
-
-#     return hxmp
+    Returns:
+        _type_: _description_
+    """
+    return range(-r, r + 1) if isinstance(r, int) else range(r[0], r[1] + 1)
 
 
-# def rhombus(value: Any = None, radius) -> HexMap:
-#     """Create a HexMap in the shape of a rhombus (aka diamond) ⬧
-#     :param value: The value that should initially be assigned to all Hexagons
-#     :param axes: jskeow
-#     :return: The rhombus HexMap
+def parallelogram(
+    axes: dict[str, int | tuple[int, int]] = {"q": 2, "r": 1},
+    value: Any = None,
+    hexorigin: Hex = Hexigo,
+    hollow: bool = False,
+) -> HexMap:  # sourcery skip: default-mutable-arg
+    """Create a HexMap in the shape of a Parallelogram ▰
 
-# def triangle(value: Any = None, axes: str = "qs") -> HexMap:
+    Args:
+        axes (_type_, optional): _description_. Defaults to {"q": 2, "r": 2}.
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): _description_. Defaults to Hexigo.
+        hollow (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        HexMap: The parallelogram HexMap
+    """
+
+    # TODO type and value checking!
+
+    # elif not isinstance(axes, dict):
+    #     raise TypeError("")
+
+    # elif len(axes) != 2:
+    #     raise ValueError("")
+
+    # for ax in axes:
+    #     if not isinstance(axes[ax], tuple):
+    #         raise TypeError("")
+
+    #     elif len(axes[ax]) != 2:
+    #         raise ValueError("")
+
+    # Creating a Hex at Hexigo which will effectively be "moved" around the shape
+    hx = Hex(0, 0)
+    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+
+    ax1, ax2 = axes
+    range1 = _axrange(axes[ax1])
+    range2 = _axrange(axes[ax2])
+
+    for c1 in range1:
+        if not hollow or c1 == min(range1) or c1 == max(range1):
+            for c2 in range2:
+                hx[ax1, ax2] = (c1, c2)
+                hxmp.insert(hx)
+
+        else:
+            hx[ax1, ax2] = (c1, min(range2))
+            hxmp.insert(hx)
+
+            hx[ax1, ax2] = (c1, max(range2))
+            hxmp.insert(hx)
+
+    return hxmp
+
+
+def rhombus(
+    size: int = 1,
+    axes: str | tuple[str, str] = ("q", "s"),
+    **kwargs,
+) -> HexMap:
+    """Create a HexMap in the shape of a rhombus (aka diamond) ⬧
+
+    Args:
+        size (int, optional): _description_. Defaults to 1.
+        axes (str | tuple[str, str], optional): _description_. Defaults to ("q", "s").
+        value (Any, optional): The value that should initially be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): _description_. Defaults to Hexigo.
+        hollow (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        HexMap: The rhombus HexMap
+    """
+
+    return parallelogram({axes[0]: size, axes[1]: size}, **kwargs)
+
+
+def rectangle(
+    axes: dict[str, int | tuple[int, int]] = {"q": (-3, 3), "r": (-2, 2)},
+    value: Any = None,
+    hexorigin: Hex = Hexigo,
+    hollow: bool = False,
+) -> HexMap:  # sourcery skip: default-mutable-arg
+    """Create a HexMap in the shape of a Rectangle ▬
+    :param radius: The number of hexes from the center
+    :param value: The value that should be assigned to all Hexagons
+    :return: The rectangle HexMap"""
+
+    # for (int r = top; r <= bottom; r++) { // pointy top
+    #     int r_offset = floor(r/2.0); // or r>>1
+    #     for (int q = left - r_offset; q <= right - r_offset; q++) {
+    #         map.insert(Hex(q, r, -q-r));
+    #     }
+    # }
+
+    ax2, ax1 = axes
+    # FIXME
+
+    v2, v1 = axes.values()
+
+    left, right = (-v2, v2) if isinstance(v2, int) else v2
+    top, bottom = (-v1, v1) if isinstance(v1, int) else v1
+
+    hx = Hex(0, 0)
+    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+
+    range1 = range(top, bottom + 1)
+
+    for c1 in range1:
+        range2 = range(left - floor(c1 / 2), right - floor(c1 / 2) + 1)
+
+        if not hollow or c1 == min(range1) or c1 == max(range1):
+            for c2 in range2:
+                hx[ax1, ax2] = (c1, c2)
+                hxmp.insert(hx)
+
+        else:
+            hx[ax1, ax2] = (c1, min(range2))
+            hxmp.insert(hx)
+
+            hx[ax1, ax2] = (c1, max(range2))
+            hxmp.insert(hx)
+
+    return hxmp
+
+
+def square(
+    size: int = 1,
+    axes: str | tuple[str, str] = ("r", "q"),
+    **kwargs,
+):
+    """Create a HexMap in the shape of a Square ■
+    :param radius: The number of hexes from the center
+    :param value: The value that should be assigned to all Hexagons
+    :return: The square HexMap"""
+
+    return rectangle({axes[0]: size, axes[1]: size}, **kwargs)
+
+
+# def triangle(
+#     axes: set[str] | tuple[str, str] = ("q", "r"),
+#     side: int | tuple = 2,
+#     value: Any = None,
+#     hexorigin: Hex = Hexigo,
+#     hollow: bool = False,
+# ) -> HexMap:
 #     """Create a HexMap in the shape of a Triangle ▲
 #     :param radius: The number of hexes from the center
-#     :param value: The value thatv should be assigned to all Hexagons
+#     :param value: The value that should be assigned to all Hexagons
 #     :return: The triangle HexMap"""
+
+#     # for (int q = 0; q <= map_size; q++) {
+#     #     for (int r = 0; r <= map_size - q; r++) {
+#     #         map.insert(Hex(q, r, -q-r));
+#     #     }
+#     # }
+
+#     hx = Hex(0, 0)
+#     hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+
+#     ax1, ax2 = axes
+
+#     if isinstance(side, int):
+#         r1 = range(-side * 2, side + 1)
+#         r2 = lambda c: range(-side - c, side + 1)
+#     else:
+#         r1 = range(side[0], side[1] + 1)
+#         r2 = lambda c: range(side[0], side[1] - c + 1)
+
+#     for c1 in r1:
+#         # if not hollow or c1 == min(r) or c1 == max(r):
+
+#         for c2 in r2(c1):
+#             hx[ax1, ax2] = (c1, c2)
+#             hxmp.insert(hx)
+
+#         # else:
+#         #     hx[ax1, ax2] = (c1, min(range2))
+#         #     hxmp.insert(hx)
+
+#         #     hx[ax1, ax2] = (c1, max(range2))
+#         #     hxmp.insert(hx)
+
+#     return hxmp
 
 
 # def star(value: Any = None, axes: str = "qs") -> HexMap:
@@ -748,16 +912,3 @@ def hexagon(
 #     :param radius: The number of hexes from the center
 #     :param value: The value that should be assigned to all Hexagons
 #     :return: The star HexMap"""
-
-
-# def rectangle(value: Any = None, axes):
-#     """Create a HexMap in the shape of a Rectangle ▬
-#     :param radius: The number of hexes from the center
-#     :param value: The value that should be assigned to all Hexagons
-#     :return: The rectangle HexMap"""
-
-# def square(value: Any = None, axes):
-#     """Create a HexMap in the shape of a Square ■
-#     :param radius: The number of hexes from the center
-#     :param value: The value that should be assigned to all Hexagons
-#     :return: The square HexMap"""

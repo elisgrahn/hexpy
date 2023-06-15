@@ -1,8 +1,8 @@
 dev/
 .vscode/
-*test.ipynb
+*test*.ipynb
 *.pkl
-*test.py
+*test*.py
 tests
 /res/hidden/
 example_google.py
