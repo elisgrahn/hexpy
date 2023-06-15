@@ -90,7 +90,7 @@ class Hex:
             >>> Hex(q=1, r=2, s=3)
             ValueError: Incorrect coordinates: q + r + s must be equal to 0, but was equal to 6
 
-            This makes cube input safer compared to axial, due to the additional coord checking, but cube is not required and will not be stored.
+            This makes cube input safer than axial, due to the double check of coords, but cube input is not required and s will not be stored.
         """
         coord_sum = sum(self.axial_coords) + new_s
 
@@ -251,7 +251,7 @@ class Hex:
 
         return tuple(self + diagonal for diagonal in self.clock.diagonals)
 
-    def __setitem__(self, coords: Iterable[str], values: Iterable[float]):
+    def __setitem__(self, coords: tuple[str, ...], values: tuple[float, ...]):
         """Used to change q, r and s in a dict like manner
 
         Args:
@@ -264,15 +264,21 @@ class Hex:
             >>> hex
             Hex(q=2, r=1, s=-3)
         """
+        implicit_coord = "s"
 
-        # TODO if not 2 <= len(coords) <= 3: raise ValueError()
+        if len(coords) == 2:
+            implicit_coord = tuple({"q", "r", "s"} - set(coords))[0]
+
+        if implicit_coord != "s":
+            setattr(self, implicit_coord, -sum(values))
+
+        # TODO else: raise ValueError()
 
         for coord, value in zip(coords, values):
-            # TODO if coord not in self.__slots__: raise ValueError()
+            if coord in ["s", implicit_coord]:
+                continue
 
             setattr(self, coord, value)
-
-        # self.__dict__.update(zip(attrlist, valuelist))
 
     def __round__(self, ndigits: Optional[int] = None) -> Hex:
         """Round the Hex coordinates to whole integers
@@ -670,10 +676,42 @@ class Hex:
 
     def __contains__(self, c: float) -> bool:
         """Check if Hex has c as a cube coord"""
-
         return c in self.cube_coords
 
     def rotate_left(self, steps: int = 1) -> Hex:
+        """Inplace rotate this Hex 60 * steps degrees to the left around Hexigo.
+
+        Args:
+            steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
+
+        Returns:
+            Hex: This Hex rotated left around Hexigo.
+        """
+        n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
+
+        # Set cube coords of this hex to q, r, s rotated steps % 3 to the left
+        self.cube_coords = tuple(islice(cycle(self.cube_coords), 3 - n, 6 - n))
+
+        # Negate the hex values if rotating odd amount of steps
+        return -self if steps % 2 else self
+
+    def rotate_left_around(self, other: Hex, steps: int = 1) -> Hex:
+        """Inplace rotate this Hex 60 * steps degrees to the left around other Hex.
+
+        Args:
+            other (Hex): The other Hex to rotate around.
+            steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
+
+        Returns:
+            Hex: This Hex rotated left around other.
+        """
+        self -= other
+        self.rotate_left(steps)
+        self += other
+
+        return self
+
+    def rotated_left(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the left around Hexigo.
 
         Note:
@@ -694,7 +732,7 @@ class Hex:
         # Negate the hex values if rotating odd amount of steps
         return -rotated_hex if steps % 2 else rotated_hex
 
-    def rotate_left_around(self, other: Hex, steps: int = 1) -> Hex:
+    def rotated_left_around(self, other: Hex, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the left around other Hex.
 
         Note:
@@ -742,11 +780,11 @@ class Hex:
 
         # Just steps was provided, rotate around Hexigo
         if isinstance(input, int):
-            return self.rotate_left(input)
+            return self.rotated_left(input)
 
         # Just other Hex was provided, rotate 1 step around other Hex
         elif isinstance(input, Hex):
-            return self.rotate_left_around(input)
+            return self.rotated_left_around(input)
 
         # Both other Hex and steps was provided
         elif (
@@ -754,13 +792,46 @@ class Hex:
             and isinstance(input[0], Hex)
             and isinstance(input[1], int)
         ):
-            return self.rotate_left_around(*input)
+            return self.rotated_left_around(*input)
 
         else:
             # TODO
             raise TypeError("")
 
     def rotate_right(self, steps: int = 1):
+        """Inplace rotate this Hex 60 * steps degrees to the right around Hexigo.
+
+        Args:
+            steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
+
+        Returns:
+            Hex: This Hex rotated right around Hexigo.
+        """
+        n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
+
+        # Get a new hex with q, r, s rotated steps % 3 to the right
+        self.cube_coords = tuple(islice(cycle(self.cube_coords), n, 3 + n))
+
+        # Negate the hex values if rotating odd amount of steps
+        return -self if steps % 2 else self
+
+    def rotate_right_around(self, other: Hex, steps: int = 1) -> Hex:
+        """Inplace rotate this Hex 60 * steps degrees to the right around other Hex.
+
+        Args:
+            other (Hex): The other Hex to rotate around.
+            steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
+
+        Returns:
+            Hex: This Hex rotated right around other.
+        """
+        self -= other
+        self.rotate_right()
+        self += other
+
+        return self
+
+    def rotated_right(self, steps: int = 1):
         """Rotate the Hex 60 * steps degrees to the right around Hexigo.
 
         Note:
@@ -780,7 +851,7 @@ class Hex:
         # Negate the hex values if rotating odd amount of steps
         return -rotated_hex if steps % 2 else rotated_hex
 
-    def rotate_right_around(self, other: Hex, steps: int = 1) -> Hex:
+    def rotated_right_around(self, other: Hex, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the right around other Hex.
 
         Note:
@@ -796,7 +867,7 @@ class Hex:
         return (self - other).rotate_right(steps) + other
 
     def __rshift__(self, input: int | Hex | tuple[Hex, int]) -> Hex:
-        """Convienience method for both rotate_right() and rotate_right_around().
+        """Convienience method for both rotated_right() and rotated_right_around().
 
         Args:
             input (int | Hex | tuple[Hex, int]): If only an ``int`` is provided that will be used as steps to rotate around ``Hexigo``.
@@ -828,11 +899,11 @@ class Hex:
 
         # Just steps was provided, rotate around Hexigo
         if isinstance(input, int):
-            return self.rotate_right(input)
+            return self.rotated_right(input)
 
         # Just other Hex was provided, rotate 1 step around other Hex
         elif isinstance(input, Hex):
-            return self.rotate_right_around(input)
+            return self.rotated_right_around(input)
 
         # Both other Hex and steps was provided
         elif (
@@ -840,7 +911,7 @@ class Hex:
             and isinstance(input[0], Hex)
             and isinstance(input[1], int)
         ):
-            return self.rotate_right_around(*input)
+            return self.rotated_right_around(*input)
 
         else:
             # TODO
@@ -1094,8 +1165,8 @@ class Hex:
     @classmethod
     def pointy_layout(
         cls,
-        size: int | Point | tuple[int, int],
-        origin: Point | tuple[int, int],
+        size: int | tuple[int, int],
+        origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
 
@@ -1109,8 +1180,8 @@ class Hex:
     @classmethod
     def flat_layout(
         cls,
-        size: int | Point | tuple[int, int],
-        origin: Point | tuple[int, int],
+        size: int | tuple[int, int],
+        origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
 
@@ -1124,18 +1195,18 @@ class Hex:
     @classmethod
     def custom_layout(
         cls,
-        size: int | Point | tuple[int, int],
-        origin: Point | tuple[int, int],
         orientation: hexlayout.Orientation,
+        size: int | tuple[int, int],
+        origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
 
         Args:
+            orientation (hexlayout.Orientation): _description_
             size (int | Point | tuple[int, int]): _description_
             origin (Point | tuple[int, int]): _description_
-            orientation (hexlayout.Orientation): _description_
         """
-        cls.layout = hexlayout.custom(size, origin, orientation)
+        cls.layout = hexlayout.custom(orientation, size, origin)
         cls.clock = hexclock.pointy()
 
 

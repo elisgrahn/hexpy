@@ -159,8 +159,8 @@ flat_orientation = Orientation(
 
 
 def pointy(
-    size: int | Point | tuple[int, int],
-    origin: Point | tuple[int, int],
+    size: int | tuple[int, int],
+    origin: tuple[int, int],
 ) -> Layout:
     """_summary_
 
@@ -175,8 +175,8 @@ def pointy(
 
 
 def flat(
-    size: int | Point | tuple[int, int],
-    origin: Point | tuple[int, int],
+    size: int | tuple[int, int],
+    origin: tuple[int, int],
 ) -> Layout:
     """_summary_
 
@@ -191,16 +191,16 @@ def flat(
 
 
 def custom(
-    size: int | Point | tuple[int, int],
-    origin: Point | tuple[int, int],
     orientation: Orientation,
+    size: int | tuple[int, int],
+    origin: tuple[int, int],
 ) -> Layout:
     """_summary_
 
     Args:
+        orientation (Orientation): _description_
         size (int | Point | tuple[int, int]): _description_
         origin (Point | tuple[int, int]): _description_
-        orientation (Orientation): _description_
 
     Returns:
         Layout: _description_
