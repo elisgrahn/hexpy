@@ -316,8 +316,8 @@ class Hex:
 
         return Hex(q, r, s)
 
-    def round(self, ndigits: Optional[int] = None) -> Hex:
-        """Round the coordinates of this Hex
+    def rounded(self, ndigits: Optional[int] = None) -> Hex:
+        """Get the rounded coordinates of this Hex
 
         Note:
             This can also be done using the function ``round()`` on a Hex.
@@ -330,7 +330,13 @@ class Hex:
         """
         return round(self, ndigits)
 
-    def inplace_round(self, ndigits: Optional[int] = None) -> Hex:
+    def round(self, ndigits: Optional[int] = None) -> None:
+        """Inplace round the coordinates of this Hex
+
+        Args:
+            ndigits (int, optional): The number of digits to round to. Defaults to None.
+        """
+
         # rounded q, r and s
         q = round(self.q, ndigits)
         r = round(self.r, ndigits)
@@ -350,8 +356,6 @@ class Hex:
             s = -q - r
 
         self.cube_coords = (q, r, s)
-
-        return self
 
     def __iter__(self) -> Iterator[float]:
         """Iterate through this Hex's axial coords
@@ -640,7 +644,7 @@ class Hex:
             )
 
         self.axial_coords = (self.q / d, self.r / d)
-        self.inplace_round()
+        self.round()
 
         return self
 
@@ -678,14 +682,11 @@ class Hex:
         """Check if Hex has c as a cube coord"""
         return c in self.cube_coords
 
-    def rotate_left(self, steps: int = 1) -> Hex:
+    def rotate_left(self, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the left around Hexigo.
 
         Args:
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
-
-        Returns:
-            Hex: This Hex rotated left around Hexigo.
         """
         n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
 
@@ -693,23 +694,18 @@ class Hex:
         self.cube_coords = tuple(islice(cycle(self.cube_coords), 3 - n, 6 - n))
 
         # Negate the hex values if rotating odd amount of steps
-        return -self if steps % 2 else self
+        self = -self if steps % 2 else self
 
-    def rotate_left_around(self, other: Hex, steps: int = 1) -> Hex:
+    def rotate_left_around(self, other: Hex, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the left around other Hex.
 
         Args:
             other (Hex): The other Hex to rotate around.
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
-
-        Returns:
-            Hex: This Hex rotated left around other.
         """
         self -= other
         self.rotate_left(steps)
         self += other
-
-        return self
 
     def rotated_left(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the left around Hexigo.
@@ -745,7 +741,7 @@ class Hex:
         Returns:
             Hex: This Hex rotated left around other.
         """
-        return (self - other).rotate_left(steps) + other
+        return (self - other).rotated_left(steps) + other
 
     def __lshift__(self, input: int | Hex | tuple[Hex, int]) -> Hex:
         """Convienience method for both rotate_left() and rotate_left_around().
@@ -798,14 +794,11 @@ class Hex:
             # TODO
             raise TypeError("")
 
-    def rotate_right(self, steps: int = 1):
+    def rotate_right(self, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the right around Hexigo.
 
         Args:
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
-
-        Returns:
-            Hex: This Hex rotated right around Hexigo.
         """
         n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
 
@@ -813,25 +806,20 @@ class Hex:
         self.cube_coords = tuple(islice(cycle(self.cube_coords), n, 3 + n))
 
         # Negate the hex values if rotating odd amount of steps
-        return -self if steps % 2 else self
+        self = -self if steps % 2 else self
 
-    def rotate_right_around(self, other: Hex, steps: int = 1) -> Hex:
+    def rotate_right_around(self, other: Hex, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the right around other Hex.
 
         Args:
             other (Hex): The other Hex to rotate around.
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
-
-        Returns:
-            Hex: This Hex rotated right around other.
         """
         self -= other
         self.rotate_right()
         self += other
 
-        return self
-
-    def rotated_right(self, steps: int = 1):
+    def rotated_right(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the right around Hexigo.
 
         Note:
@@ -864,7 +852,7 @@ class Hex:
         Returns:
             Hex: This Hex rotated right around other.
         """
-        return (self - other).rotate_right(steps) + other
+        return (self - other).rotated_right(steps) + other
 
     def __rshift__(self, input: int | Hex | tuple[Hex, int]) -> Hex:
         """Convienience method for both rotated_right() and rotated_right_around().
