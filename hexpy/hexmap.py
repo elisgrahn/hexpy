@@ -50,12 +50,13 @@ Examples:
 from __future__ import annotations
 
 import builtins
+import inspect
 import pickle
 import warnings
 from collections.abc import Iterable, Set
 from math import floor
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Callable, Iterator, Optional
 
 from _collections_abc import dict_items, dict_keys, dict_values
 
@@ -174,7 +175,7 @@ class HexMap(dict):
             super().__init__(hexes)
 
     def _new(self, hexes: dict[Hex, Any]) -> HexMap:
-        """Create a new HexMap, only passing on the default value and hexorigin offset
+        """Create a new HexMap, passing on the default value and hexorigin offset
 
         Args:
             hexes (dict[Hex, Any]): Hexes for the new HexMap
@@ -186,9 +187,6 @@ class HexMap(dict):
 
     def copy(self) -> HexMap:
         """Create a new identical HexMap
-
-        Args:
-            clear (bool, optional): If True the copy will not inherit any values, just the keys. Defaults to False.
 
         Returns:
             HexMap: A copy of this HexMap
@@ -342,6 +340,8 @@ class HexMap(dict):
         for hex in self.hexes():
             self[hex] = value
 
+    # addition and union
+
     def __or__(self, other: HexMap) -> HexMap:
         """Get the union of this HexMap and other where values from other will be on the top
 
@@ -388,7 +388,153 @@ class HexMap(dict):
                 f"Argument other was provided {other} of type {type(other)} which is neither a Hex nor a HexMap"
             )
 
-    # __radd__ is intentionally undefined since it matters which hxmp is first
+    def union(
+        self,
+        other: HexMap,
+        func: Optional[Callable[[Any, Any], Any]] = None,
+    ) -> HexMap:
+        """Get union of this HexMap and other,
+
+        The order matters since values from ``other`` will be used for the intersection
+
+        Note:
+            This can also be done using the operators ``|`` or ``+`` between two ``HexMap`` objects.
+
+        Args:
+            other (HexMap): The other ``HexMap``.
+            func (Callable[[Any, Any], Any], optional): A function that will be applied to all values of intersecting Hexes.
+                If omitted the values of this HexMap will be preserved. Defaults to None.
+        Raises:
+            TypeError: If ``other`` is not of type ``HexMap``
+
+        Returns:
+            HexMap: The union as a new HexMap
+
+        Examples:
+
+            Creating two hexagonal hexmaps
+
+            >>> hxmp1 = hexmap.hexagon(radius=1, value=1)
+            >>> hxmp2 = hexmap.hexagon(radius=1, value=2, hexorigin=Hex(1, 0))
+
+            Using function to add values of intersecting Hexes
+
+            Either lambda:
+
+            >>> inter_func = lambda v1, v2: v1 + v2
+
+            Or function definition:
+
+            >>> def inter_func(v1, v2): return v1 + v2
+
+            Sending in the function to use while creating union
+
+            >>> hxmp3 = hxmp1.union(hxmp2, inter_func)
+            >>> hxmp3.plot({1: "b", 2: "r", 3: "m"})
+        """
+        if func is None:
+            return self | other
+
+        # Checking that func is Callable and that it has two arguments, which are values from the first and second HexMap
+        elif isinstance(func, Callable) and len(inspect.getfullargspec(func).args) == 2:
+            # self explanatory hehe
+            def unite(k):
+                if k in self and k in other:
+                    return func(self[k], other[k])
+
+                return self[k] if k in self else other[k]
+
+            return self._new({k: unite(k) for k in self.keys() | other.keys()})
+
+            # self_copy = self.copy()
+            # self_copy.update({k: func(self[k], other[k]) for k in other if self.get(k)})
+
+            # return self._new({**other, **self_copy})
+
+        else:
+            # TODO
+            raise TypeError("")
+
+    # intersection
+
+    def __and__(self, other: HexMap) -> HexMap:
+        """Intersect two HexMaps.
+
+        Args:
+            other (HexMap): The other HexMap
+
+        Raises:
+            TypeError: If ``other`` is not of type ``HexMap``
+
+        Returns:
+            HexMap: Intersecting Hexes as a HexMap
+        """
+
+        if isinstance(other, HexMap):
+            return self._new({k: self[k] for k in self.keys() & other.keys()})
+
+        else:
+            raise TypeError(
+                f"Argument other was provided {other} of type {type(other)} which is not a HexMap"
+            )
+
+    def intersection(
+        self,
+        other: HexMap,
+        func: Optional[Callable[[Any, Any], Any]] = None,
+    ) -> HexMap:
+        """Get intersection of this HexMap and other.
+
+        Note:
+            This can also be done using the operators ``&`` between two ``HexMap`` objects.
+
+        Args:
+            other (HexMap): The other ``HexMap``.
+            func (Callable[[Any, Any], Any], optional): A function that will be applied to all values of intersecting Hexes.
+                If omitted the values of this HexMap will be preserved. Defaults to None.
+
+        Raises:
+            TypeError: If ``other`` is not of type ``HexMap``
+
+        Returns:
+            HexMap: The intersection as a new HexMap
+
+        Examples:
+
+            Creating two hexagonal hexmaps
+
+            >>> hxmp1 = hexmap.hexagon(radius=1, value=1)
+            >>> hxmp2 = hexmap.hexagon(radius=1, value=2, hexorigin=Hex(1, 0))
+
+            Using function to add values of intersecting Hexes
+
+            Either lambda:
+
+            >>> inter_func = lambda v1, v2: v1 + v2
+
+            Or function definition:
+
+            >>> def inter_func(v1, v2): return v1 + v2
+
+            Sending in the function to use while intersecting
+
+            >>> hxmp3 = hxmp1.intersection(hxmp2, inter_func)
+            >>> hxmp3.plot({1: "b", 2: "r", 3: "m"})
+        """
+        if func is None:
+            return self & other
+
+        # Checking that func is Callable and that it has two arguments, which are values from the first and second HexMap
+        elif isinstance(func, Callable) and len(inspect.getfullargspec(func).args) == 2:
+            return self._new(
+                {k: func(self[k], other[k]) for k in self.keys() & other.keys()}
+            )
+
+        else:
+            # TODO
+            raise TypeError("")
+
+    # difference
 
     def __sub__(self, other: Hex | HexMap) -> HexMap:
         """Move all Hexes in this HexMap by another Hex or get the difference of this HexMap and other
@@ -415,32 +561,25 @@ class HexMap(dict):
                 f"Argument other was provided {other} of type {type(other)} which is neither a Hex nor a HexMap"
             )
 
-    # __rsub__ is intentinally undefined
+    def difference(self, other: HexMap) -> HexMap:
+        """Get difference between this HexMap and other, order matters.
 
-    def __and__(self, other: HexMap) -> HexMap:
-        """Intersect two HexMaps.
+        Note:
+            This can also be done using the operator ``-`` between two ``HexMap`` objects.
 
         Args:
-            other (HexMap): The other HexMap
+            other (HexMap): The other ``HexMap``.
 
         Raises:
             TypeError: If ``other`` is not of type ``HexMap``
 
         Returns:
-            HexMap: Intersecting Hexes as a HexMap
+            HexMap: The difference as a new HexMap
+
         """
+        return self - other
 
-        if isinstance(other, HexMap):
-            return self._new({k: self[k] for k in self.keys() & other.keys()})
-
-        else:
-            raise TypeError(
-                f"Argument other was provided {other} of type {type(other)} which is not a HexMap"
-            )
-
-    def __mul__(self, other: HexMap) -> HexMap:
-        """Intersect two HexMaps."""
-        return self & other
+    # symmetric difference
 
     def __xor__(self, other: HexMap) -> HexMap:
         """Get symmetric difference of two HexMaps.
@@ -468,47 +607,6 @@ class HexMap(dict):
                 f"Argument other was provided {other} of type {type(other)} which is not a HexMap"
             )
 
-    def __truediv__(self, other: HexMap) -> HexMap:
-        """Get difference of two HexMaps."""
-
-        return self ^ other
-
-    def union(self, other: HexMap) -> HexMap:
-        """Get union of this HexMap and other,
-
-        The order matters since values from ``other`` will be used for the intersection
-
-        Note:
-            This can also be done using the operators ``|`` or ``+`` between two ``HexMap`` objects.
-
-        Args:
-            other (HexMap): The other ``HexMap``.
-
-        Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
-
-        Returns:
-            HexMap: The union as a new HexMap
-        """
-        return self | other
-
-    def intersection(self, other: HexMap) -> HexMap:
-        """Get intersection of this HexMap and other.
-
-        Note:
-            This can also be done using the operators ``&`` or ``*`` between two ``HexMap`` objects.
-
-        Args:
-            other (HexMap): The other ``HexMap``.
-
-        Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
-
-        Returns:
-            HexMap: The intersection as a new HexMap
-        """
-        return self & other
-
     def symmetric_difference(self, other: HexMap) -> HexMap:
         """Get symmetric difference between this HexMap and other.
 
@@ -526,22 +624,7 @@ class HexMap(dict):
         """
         return self ^ other
 
-    def difference(self, other: HexMap) -> HexMap:
-        """Get difference between this HexMap and other, order matters.
-
-        Note:
-            This can also be done using the operator ``-`` between two ``HexMap`` objects.
-
-        Args:
-            other (HexMap): The other ``HexMap``.
-
-        Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
-
-        Returns:
-            HexMap: The difference as a new HexMap
-        """
-        return self - other
+    # save and plot
 
     def save(self, filepath: Path | str) -> None:
         """Save a Hexmap at filepath using pickle
@@ -590,10 +673,6 @@ class HexMap(dict):
         WHITE = (0.96, 0.96, 0.94)
         GRAY = (0.74, 0.74, 0.74)
 
-        Q = (0.35, 0.7, 0.0, 0.6)
-        R = (0.11, 0.64, 0.91, 0.6)
-        S = (0.9, 0.1, 0.9, 0.6)
-
         fig, ax = plt.subplots(num="HexMap Plotter")
         fig.tight_layout()
         ax.invert_yaxis()
@@ -630,17 +709,22 @@ class HexMap(dict):
         origin = self.hexorigin.to_point()
         diagonal = self.hexorigin + Hex(2, -1)
 
-        for col, lbl in zip((Q, R, S), ("Q-axis", "R-axis", "S-axis")):
-            ax.axline(origin, diagonal.to_point(), color=col, label=lbl)
-            # , zorder=0) Used to set axline behind patches
+        if draw_axes:
+            Q = (0.35, 0.7, 0.0, 0.6)
+            R = (0.11, 0.64, 0.91, 0.6)
+            S = (0.9, 0.1, 0.9, 0.6)
 
-            # Rotate the diagonal inplace to the right around hex origin two steps
-            diagonal >>= (self.hexorigin, 2)
+            for col, lbl in zip((Q, R, S), ("Q-axis", "R-axis", "S-axis")):
+                ax.axline(origin, diagonal.to_point(), color=col, label=lbl)
+                # , zorder=0) Used to set axline behind patches
+
+                # Rotate the diagonal inplace to the right around hex origin two steps
+                diagonal >>= (self.hexorigin, 2)
 
         # This is used to display q, r and s values in the top right of the window
         def coord_display(x, y):
             x, y = round(x, 1), round(y, 1)
-            hexagon = Hex.from_point((x, y)).inplace_round(1)
+            hexagon = Hex.from_point((x, y)).rounded(1)
 
             q, r, s = (round(c, 1) for c in hexagon.cube_coords)
 

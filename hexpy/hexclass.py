@@ -280,17 +280,22 @@ class Hex:
 
             setattr(self, coord, value)
 
-    def __round__(self, ndigits: Optional[int] = None) -> Hex:
-        """Round the Hex coordinates to whole integers
+    # rounding
+
+    def rounded(self, ndigits: Optional[int] = None) -> Hex:
+        """Get the rounded coordinates of this Hex
+
+        Note:
+            This can also be done using the function ``round()`` on a Hex.
 
         Args:
-            ndigits (int, optional): The number of digits to round to. Defaults to None.. Defaults to None.
+            ndigits (int, optional): The number of digits to round to. Defaults to None.
 
         Returns:
             Hex: This Hex with rounded coordinates
         """
 
-        # Apperently these listcomprehensions are slower... :(
+        # These listcomprehensions are slower... :(
         # (q, dq), (r, dr), (s, ds) = ((round(crd), abs(round(crd) - crd)) for crd in (self.q, self.r, self.s))
 
         # Walrus flex:
@@ -315,20 +320,6 @@ class Hex:
             s = -q - r
 
         return Hex(q, r, s)
-
-    def rounded(self, ndigits: Optional[int] = None) -> Hex:
-        """Get the rounded coordinates of this Hex
-
-        Note:
-            This can also be done using the function ``round()`` on a Hex.
-
-        Args:
-            ndigits (int, optional): The number of digits to round to. Defaults to None.
-
-        Returns:
-            Hex: This Hex with rounded coordinates
-        """
-        return round(self, ndigits)
 
     def round(self, ndigits: Optional[int] = None) -> None:
         """Inplace round the coordinates of this Hex
@@ -357,14 +348,15 @@ class Hex:
 
         self.cube_coords = (q, r, s)
 
-    def __iter__(self) -> Iterator[float]:
-        """Iterate through this Hex's axial coords
+    __round__ = rounded
 
-        Yields:
-            Iterator[float]: _description_
-        """
+    # representations
 
-        yield from self.axial_coords
+    def __repr__(self) -> str:
+        """Return a nicely formatted Hex representation string"""
+        q, r, s = self.cube_coords
+
+        return f"Hex({q=}, {r=}, {s=})"
 
     def __hash__(self) -> int:
         """Return (q, r) as a hash number
@@ -375,11 +367,7 @@ class Hex:
 
         return hash(self.axial_coords)
 
-    def __repr__(self) -> str:
-        """Return a nicely formatted Hex representation string"""
-        q, r, s = self.cube_coords
-
-        return f"Hex({q=}, {r=}, {s=})"
+    # length
 
     def __len__(self) -> int:
         """Get the displacement from this Hex to Hexigo"""
@@ -400,7 +388,6 @@ class Hex:
         Returns:
             int: The length, which can be thought of as the least amount of Hexes you have to pass through when walking from this Hex to other.
         """
-
         if not isinstance(other, Hex):
             raise TypeError(
                 f"Cannot get length from {self} of type {type(self)} to {other} of type {type(other)}"
@@ -408,13 +395,31 @@ class Hex:
 
         return len(self) if other is None else len(self - other)
 
-    def __neg__(self) -> Hex:
+    # negation
+
+    def negate(self) -> None:
+        """Inplace the values of self, effectively flipping it around Hexigo
+
+        Returns:
+            Hex: This Hex but negated
+        """
+        self.q = -self.q
+        self.r = -self.r
+
+    def negated(self) -> Hex:
         """Negate the values of self, effectively flipping it around Hexigo
+
+        Note:
+
 
         Returns:
             Hex: This Hex but negated
         """
         return Hex(-self.q, -self.r)
+
+    __neg__ = negated
+
+    # addition and subtraction
 
     def __add__(self, other: Hex) -> Hex:
         """Add this Hex with other Hex
@@ -428,12 +433,10 @@ class Hex:
         Returns:
             Hex: This Hex added to other Hex
         """
-
         if not isinstance(other, Hex):
             raise TypeError(
                 f"Cannot add {self} of type {type(self)} to {other} of type {type(other)}"
             )
-
         return Hex(self.q + other.q, self.r + other.r)
 
     __radd__ = __add__
@@ -450,14 +453,11 @@ class Hex:
         Returns:
             Hex: This Hex added to other Hex
         """
-
         if not isinstance(other, Hex):
             raise TypeError(
                 f"Cannot add {self} of type {type(self)} to {other} of type {type(other)}"
             )
-
         self.axial_coords = (self.q + other.q, self.r + other.q)
-
         return self
 
     def __sub__(self, other: Hex) -> Hex:
@@ -476,7 +476,6 @@ class Hex:
             raise TypeError(
                 f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
             )
-
         return self + -other
 
     def __rsub__(self, other: Hex) -> Hex:
@@ -491,12 +490,10 @@ class Hex:
         Returns:
             Hex: The other Hex subtracted by this Hex
         """
-
         if not isinstance(other, Hex):
             raise TypeError(
                 f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
             )
-
         return other + -self
 
     def __isub__(self, other: Hex):  # -> Self:
@@ -515,10 +512,10 @@ class Hex:
             raise TypeError(
                 f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
             )
-
         self.axial_coords = (self.q - other.q, self.r - other.s)
-
         return self
+
+    # multiplication and division
 
     def __mul__(self, k: float) -> Hex:
         """Multiplicate ``this Hex`` by factor ``k``
@@ -532,12 +529,10 @@ class Hex:
         Returns:
             Hex: This Hex multiplied by k
         """
-
         if not isinstance(k, (int, float)):
             raise TypeError(
                 f"Cannot multiplicate {self} of type {type(self)} with {k} of type {type(k)}"
             )
-
         return Hex(self.q * k, self.r * k)
 
     __rmul__ = __mul__
@@ -559,9 +554,7 @@ class Hex:
             raise TypeError(
                 f"Cannot multiplicate {self} of type {type(self)} with {k} of type {type(k)}"
             )
-
         self.axial_coords = (self.q * k, self.r * k)
-
         return self
 
     def __truediv__(self, d: float) -> Hex:
@@ -581,7 +574,6 @@ class Hex:
             raise TypeError(
                 f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
             )
-
         return Hex(self.q / d, self.r / d)
 
     def __itruediv__(self, d: float):  # -> Self
@@ -596,12 +588,10 @@ class Hex:
         Returns:
             Hex: This Hex divided by d
         """
-
         if not isinstance(d, (int, float)):
             raise TypeError(
                 f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
             )
-
         self.axial_coords = (self.q / d, self.r / d)
         return self
 
@@ -617,12 +607,10 @@ class Hex:
         Returns:
             Hex: This Hex divided by d
         """
-
         if not isinstance(d, (int, float)):
             raise TypeError(
                 f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
             )
-
         return round(Hex(self.q / d, self.r / d))
 
     def __ifloordiv__(self, d: float):  # -> Self
@@ -637,19 +625,21 @@ class Hex:
         Returns:
             Hex: This Hex divided by d
         """
-
         if not isinstance(d, (int, float)):
             raise TypeError(
                 f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
             )
-
         self.axial_coords = (self.q / d, self.r / d)
         self.round()
-
         return self
 
-    def __eq__(self, other: Hex) -> bool:
+    # comparisons
+
+    def equals(self, other: Hex | object) -> bool:
         """Check if this Hex is equal to other.
+
+        Note:
+            This can also be done using equal operator, ``Hex1 == Hex2`` or ``Hex1 == 2``.
 
         Args:
             other (Hex): The Hex to compare with
@@ -661,6 +651,8 @@ class Hex:
             return self.axial_coords == other.axial_coords
 
         return False
+
+    __eq__ = equals
 
     def __lt__(self, other: Hex) -> bool:
         """Check if this Hex is closer to Hexigo compared to other Hex"""
@@ -681,6 +673,8 @@ class Hex:
     def __contains__(self, c: float) -> bool:
         """Check if Hex has c as a cube coord"""
         return c in self.cube_coords
+
+    # left rotation
 
     def rotate_left(self, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the left around Hexigo.
@@ -706,6 +700,8 @@ class Hex:
         self -= other
         self.rotate_left(steps)
         self += other
+
+    # TODO __ilshift__ for rotate_left and rotate_left_around
 
     def rotated_left(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the left around Hexigo.
@@ -794,6 +790,8 @@ class Hex:
             # TODO
             raise TypeError("")
 
+    # right rotation
+
     def rotate_right(self, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the right around Hexigo.
 
@@ -818,6 +816,8 @@ class Hex:
         self -= other
         self.rotate_right()
         self += other
+
+    # TODO __irshift__ for rotate_left and rotate_left_around
 
     def rotated_right(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the right around Hexigo.
@@ -905,6 +905,8 @@ class Hex:
             # TODO
             raise TypeError("")
 
+    # lerp and linedraw
+
     def coordinate_range(self, radius: int) -> Iterator[Hex]:
         """Get all Hexes within a certain radius from this Hex
 
@@ -944,7 +946,18 @@ class Hex:
 
         return self * (1.0 - t) + other * t
 
-    def nudge(self) -> Hex:
+    def nudge(self) -> None:
+        """Inplace nudge Hex in a consistent direction.
+
+        This is used have get better consistency when for instance landing between two grid cells in lerps.
+
+        Returns:
+            Hex: This Hex nudged
+        """
+        self.q += 1e-06
+        self.r += 1e-06
+
+    def nudged(self) -> Hex:
         """Nudge Hex in a consistent direction.
 
         This is used have get better consistency when for instance landing between two grid cells in lerps.
@@ -952,7 +965,6 @@ class Hex:
         Returns:
             Hex: This Hex nudged
         """
-
         return Hex(self.q + 1e-06, self.r + 1e-06)
 
     def linedraw_to(self, other: Hex) -> Iterator[Hex]:
@@ -968,12 +980,14 @@ class Hex:
         # Number of hexes that will be reqired
         steps = self.length(other)
 
-        nudged_self = self.nudge()
-        nudged_other = other.nudge()
+        nudged_self = self.nudged()
+        nudged_other = other.nudged()
 
         step_size = 1.0 / max(steps, 1)
         for i in range(steps + 1):
             yield round(nudged_self.lerp_to(nudged_other, i * step_size))
+
+    # points and pixels
 
     def to_point(self) -> Point:
         """Convert this Hex to point based on Layout
@@ -1149,6 +1163,8 @@ class Hex:
         r = O.b2 * pt.x + O.b3 * pt.y
 
         return Hex(q, r)
+
+    # layouts
 
     @classmethod
     def pointy_layout(
