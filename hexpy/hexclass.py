@@ -950,11 +950,8 @@ class Hex:
         """Inplace nudge Hex in a consistent direction.
 
         This is used have get better consistency when for instance landing between two grid cells in lerps.
-
-        Returns:
-            Hex: This Hex nudged
         """
-        self.q += 1e-06
+        self.q -= 1e-06
         self.r += 1e-06
 
     def nudged(self) -> Hex:
@@ -980,12 +977,20 @@ class Hex:
         # Number of hexes that will be reqired
         steps = self.length(other)
 
-        nudged_self = self.nudged()
-        nudged_other = other.nudged()
+        # nudged_self = self.nudged()
+        # nudged_other = other.nudged()
+
+        # step_size = 1.0 / max(steps, 1)
+        # for i in range(steps + 1):
+        #     yield round(nudged_self.lerp_to(nudged_other, i * step_size))
+
+        self.nudge()
+        other.nudge()
 
         step_size = 1.0 / max(steps, 1)
+
         for i in range(steps + 1):
-            yield round(nudged_self.lerp_to(nudged_other, i * step_size))
+            yield self.lerp_to(other, i * step_size).rounded()
 
     # points and pixels
 
