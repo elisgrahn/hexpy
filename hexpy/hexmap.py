@@ -1,3 +1,5 @@
+# Author: Elis Grahn
+
 """Method to create HexMaps
 
 To create :py:class:`hexpy.HexMap.HexMap` objects, use an appropriate factory
@@ -46,24 +48,23 @@ Examples:
     >>> hxmp.save("./my_updated_hexmap.pkl")
 """
 
-
 from __future__ import annotations
 
-import builtins
+import builtins  # type: ignore
 import inspect
-import itertools
 import pickle
 import warnings
-from collections.abc import Iterable, Set
+from collections.abc import Iterable
 from math import floor
 from pathlib import Path
-from typing import Any, Callable, Generator, Iterator, Optional
+from typing import Any, Callable, Generator, Iterator, Optional, overload
 
 from _collections_abc import dict_items, dict_keys, dict_values
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
 from .hexclass import Hex, Hexigo
+from .navigate import HexClock, HexCompass  # NOTE CIRCLE?
 
 # import dill # TODO maybe replace pickle with dill
 
@@ -81,7 +82,6 @@ def new(value: Any = None, hexorigin: Hex = Hexigo) -> HexMap:
     return HexMap(default_value=value, origin_offset=hexorigin)
 
 
-# TODO following functions
 def fromdict(
     hexes: dict[Hex, Any], value: Any = None, hexorigin: Hex = Hexigo
 ) -> HexMap:
@@ -98,7 +98,7 @@ def fromdict(
     return HexMap(hexes, default_value=value, origin_offset=hexorigin)
 
 
-def fromiter(
+def fromkeys(
     hexes: Iterable[Hex], value: Any = None, hexorigin: Hex = Hexigo
 ) -> HexMap:
     """Create a new HexMap from the given iterable of Hex
@@ -114,10 +114,9 @@ def fromiter(
         HexMap: _description_
     """
     if not isinstance(hexes, Iterable):
-        # TODO
-        raise TypeError("")
+        raise TypeError("'hexes' must be an iterable of 'Hex'")
 
-    hexes = {hex: value for hex in hexes}
+    hexes = dict.fromkeys(hexes, value)
 
     return HexMap(hexes, default_value=value, origin_offset=hexorigin)
 
@@ -167,15 +166,17 @@ class HexMap(dict):
             super().__init__()
 
         elif not isinstance(hexes, dict):
-            # TODO
-            raise TypeError("")
+            raise TypeError(
+                "HexMaps can only be created initiated from dicts, if you need to create a HexMap from another Hex iterable use 'hexmap.fromkeys()'"
+            )
 
         elif not all(isinstance(hex, Hex) for hex in hexes):
-            # TODO
-            raise TypeError("")
+            raise TypeError("All keys in a HexMap must be of type Hex")
 
         else:
             super().__init__(hexes)
+
+    # creation
 
     def _new(self, hexes: dict[Hex, Any]) -> HexMap:
         """Create a new HexMap, passing on the default value and hexorigin offset
@@ -195,6 +196,24 @@ class HexMap(dict):
             HexMap: A copy of this HexMap
         """
         return HexMap(dict(self), self.default, self.hexorigin)
+
+    # representations
+
+    def __str__(self) -> str:
+        """Return a nicely formatted HexMap representation string"""
+
+        # Following comments technically work, but don't add '' to strings so 'eval(repr(obj))' will not work in that case
+        # return "{" + ",\n".join(f"{hx}: '{v}'" for hx, v in self.items()) + "}"
+        # return ("{"+ ",\n".join(str(item)[1:-1].replace("), ", "): ") for item in self.items())+ "}")
+
+        # This is the most hacky yet elegant solution :)
+        return super().__repr__().replace(", Hex", ",\n Hex")
+
+    def __repr__(self) -> str:
+        """Return the canonical string representation of HexMap."""
+        return f"hexpy.hexmap.HexMap({str(self)})"
+
+    # keys and values
 
     def keys(self) -> dict_keys[Hex, Any]:
         """Wrapper method of .keys() to provide type annotation.
@@ -260,7 +279,72 @@ class HexMap(dict):
     def __iter__(self) -> Generator[Hex, None, None]:
         yield from super().__iter__()
 
-    def __setitem__(self, __key: Hex | HexMap, __value: Any) -> None:
+    # get and set
+
+    @overload
+    def __getitem__(self, __key: Hex) -> Any:
+        ...
+
+    @overload
+    def __getitem__(
+        self, __key: tuple[Hex, ...] | HexClock | HexCompass | HexMap
+    ) -> tuple[Any, ...]:
+        ...
+
+    @overload
+    def __getitem__(self, __key: Generator[bool, None, None]) -> HexMap:
+        ...
+
+    def __getitem__(
+        self,
+        __key: Hex
+        | tuple[Hex, ...]
+        | HexClock
+        | HexCompass
+        | HexMap
+        | Generator[bool, None, None],
+    ):
+        """Get value(s) at self[key]
+
+        Args:
+            __key (Hex | HexMap): If a ``Hex`` is provided only that Hex assigned value will be returned and if a ``HexMap`` is provided all values from this HexMap that overlap with other will be returned
+
+        Raises:
+            TypeError: If ``__key`` is not of type ``Hex`` or ``HexMap``
+
+        Returns:
+            Any | tuple[Any, ...]: Either the single value or all the values from the intersecting HexMaps
+        """
+
+        if isinstance(__key, Hex):
+            return super().__getitem__(__key)
+
+        elif isinstance(__key, (tuple, HexClock, HexCompass)):
+            # This is to handle HexClock or HexCompass in hexpy.navigate
+            # NOTE that both if you iterate on a HexClock or HexCompass you will iterate through the Hexagons and not the keys
+            return tuple(super().__getitem__(hx) for hx in __key if isinstance(hx, Hex))
+
+        elif isinstance(__key, HexMap):
+            return (self & __key).values()
+
+        elif isinstance(__key, Generator):
+            return self._new({hx: v for b, (hx, v) in zip(__key, self.items()) if b})
+
+        else:
+            raise TypeError(
+                f"Argument __key was provided {__key} of type {type(__key)} which is neither a Hex nor a HexMap"
+            )
+
+    def __setitem__(
+        self,
+        __key: Hex
+        | tuple[Hex, ...]
+        | HexClock
+        | HexCompass
+        | HexMap
+        | Generator[bool, None, None],
+        __value: Any,
+    ) -> None:
         """Set ``self[key]`` to ``value``.
 
         Args:
@@ -278,43 +362,23 @@ class HexMap(dict):
                 __value,
             )
 
-        elif isinstance(__key, HexMap):
-            for hex in __key:
-                super().__setitem__(hex, __value)
+        elif isinstance(__key, (HexMap, tuple, HexClock, HexCompass)):
+            for hx in __key:
+                self[hx] = __value
 
-        else:
-            # TODO
-            raise TypeError(
-                f"Argument __key was provided {__key} of type {type(__key)} which is neither a Hex nor a HexMap"
-            )
-
-    def __getitem__(self, __key: Hex | HexMap) -> Any | tuple[Any, ...]:
-        """Get value(s) at self[key]
-
-        Args:
-            __key (Hex | HexMap): If a ``Hex`` is provided only that Hex assigned value will be returned and if a ``HexMap`` is provided all values from this HexMap that overlap with other will be returned
-
-        Raises:
-            TypeError: If ``__key`` is not of type ``Hex`` or ``HexMap``
-
-        Returns:
-            Any | tuple[Any, ...]: Either the single value or all the values from the intersecting HexMaps
-        """
-
-        if isinstance(__key, Hex):
-            return super().__getitem__(__key)
-
-        elif isinstance(__key, HexMap):
-            # Return all values in the intersection of self and __key
-
-            return tuple(super().__getitem__(hex) for hex in self & __key)
+        elif isinstance(__key, Generator):
+            for b, hx in zip(__key, self.keys()):
+                if b:
+                    self[hx] = __value
 
         else:
             raise TypeError(
-                f"Argument __key was provided {__key} of type {type(__key)} which is neither a Hex nor a HexMap"
+                f"Argument __key was provided {__key} of type {type(__key)} which is neither a Hex, a tuple of Hex, a HexMap or a boolean mask."
             )
 
-    def insert(self, hex_or_hexmap: Hex | HexMap, value: Any = None) -> None:
+    # update
+
+    def insert(self, hexes: Hex | tuple[Hex, ...] | HexMap, value: Any = None) -> None:
         """Insert a Hex or whole HexMap in this HexMap with an optional value otherwise set to default value
 
         Args:
@@ -325,15 +389,33 @@ class HexMap(dict):
         Raises:
             TypeError: If ``hex_or_hexmap`` is not of type ``Hex`` or ``HexMap``
         """
-        if isinstance(hex_or_hexmap, (Hex, HexMap)):
-            self[hex_or_hexmap] = self.default if value is None else value
+        if isinstance(hexes, (Hex, tuple, HexMap)):
+            self[hexes] = self.default if value is None else value
 
         else:
             raise TypeError(
-                f"Argument hex_or_hexmap was provided {hex_or_hexmap} of type {type(hex_or_hexmap)} which is neither a Hex nor a HexMap"
+                f"Argument hexes was provided {hexes} of type {type(hexes)} which is neither a Hex, a tuple of Hex nor a HexMap"
             )
 
-    def set_all(self, value: Any = None) -> None:
+    def update(self, hexes: dict[Hex, Any] | HexMap) -> None:
+        """_summary_
+
+        Args:
+            hexes (dict[Hex, Any] | HexMap): _description_
+        """
+        if isinstance(hexes, HexMap):
+            super().update(hexes)
+
+        elif isinstance(hexes, dict):
+            if all(isinstance(hex, Hex) for hex in hexes):
+                super().update(hexes)
+
+        else:
+            raise TypeError(
+                f"Argument hexes was provided {hexes} of type {type(hexes)} which is neither a HexMap nor a dict"
+            )
+
+    def update_all(self, value: Any = None) -> None:
         """Set all Hexes (keys) to a certain value
 
         Args:
@@ -343,8 +425,66 @@ class HexMap(dict):
         if value is None:
             value = self.default
 
-        for hex in self.hexes():
-            self[hex] = value
+        # update all of the values in the hexmap
+        self.update(self.fromkeys(self.keys(), value))
+
+    # comparison
+
+    def __eq__(self, other: HexMap | object) -> Generator[bool, None, None]:
+        """Boolean mask
+
+        Args:
+            other (HexMap | object): _description_
+
+        Returns:
+            Iterable[bool]: _description_
+        """
+
+        return (v == other for v in self.values())
+
+    def __lt__(self, other: HexMap | object) -> Generator[bool, None, None]:
+        """Boolean mask
+
+        Args:
+            other (HexMap | object): _description_
+
+        Returns:
+            Iterable[bool]: _description_
+        """
+        return (v < other for v in self.values())
+
+    def __le__(self, other: HexMap | object) -> Generator[bool, None, None]:
+        """Boolean mask
+
+        Args:
+            other (HexMap | object): _description_
+
+        Returns:
+            Iterable[bool]: _description_
+        """
+        return (v <= other for v in self.values())
+
+    def __gt__(self, other: HexMap | object) -> Generator[bool, None, None]:
+        """Boolean mask
+
+        Args:
+            other (HexMap | object): _description_
+
+        Returns:
+            Iterable[bool]: _description_
+        """
+        return (v > other for v in self.values())
+
+    def __ge__(self, other: HexMap | object) -> Generator[bool, None, None]:
+        """Boolean mask
+
+        Args:
+            other (HexMap | object): _description_
+
+        Returns:
+            Iterable[bool]: _description_
+        """
+        return (v >= other for v in self.values())
 
     # addition and union
 
@@ -362,7 +502,7 @@ class HexMap(dict):
         """
 
         if isinstance(other, HexMap):
-            return self._new({**other, **self})
+            return self._new({**self, **other})
 
         else:
             raise TypeError(
@@ -638,7 +778,7 @@ class HexMap(dict):
         Args:
             filepath (Path | str): Path to where the HexMap ``.pkl`` file should be saved
         """
-        with builtins.open(filepath, "wb") as f:
+        with builtins.open(filepath, "wb") as f:  # type: ignore
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
 
     def plot(
@@ -662,126 +802,162 @@ class HexMap(dict):
             title (str): Set the title of the HexMap. Defaults to "Unnamed Hexmap".
         """
 
-        # TODO add argument textmap in order to map text onto hexes of certain value
-        # Problem atm is scaling of the text, want it relative to the size of hexes so that it fits properly
-        # textmap: Optional[dict[Any, str]] = None,
-        # textmap (dict[Any, str], optional):   Optional dict to map text to different values in the HexMap. Defaults to None.
+        # TODO CHANGE PLOT TO USE *args, **kwargs instead and maybe a separate module for it
+        return plot(
+            self,
+            colormap,
+            draw_axes,
+            draw_text,
+            size_factor,
+            hex_alpha,
+            facecolor,
+            title,
+            show_directly,
+        )
 
-        try:
-            import matplotlib.pyplot as plt
-            import numpy as np
-            from matplotlib.collections import PatchCollection
-            from matplotlib.patches import Polygon, RegularPolygon
 
-        except ImportError as e:
-            warnings.warn(str(e), RuntimeWarning)
-            raise
+def plot(
+    hxmp: HexMap,
+    colormap: Optional[dict[Any, Any]] = None,
+    # textmap: Optional[dict[Any, str]] = None,
+    draw_axes: bool = False,
+    draw_text: bool = False,
+    size_factor: float = 1,
+    hex_alpha: float = 0.8,
+    facecolor: Optional[Any] = None,
+    title: str = "Unnamed Hexmap",
+    show_directly: bool = True,
+) -> tuple[Figure, Axes]:
+    """Plot the HexMap using matplotlib
 
-        WHITE = (0.96, 0.96, 0.94)
-        GRAY = (0.74, 0.74, 0.74)
-        Q = (0.35, 0.7, 0.0, 0.6)
-        R = (0.11, 0.64, 0.91, 0.6)
-        S = (0.9, 0.1, 0.9, 0.6)
+    Args:
+        colormap (dict[Any, Any], optional): Optional dict to map colors to different values in the HexMap. Defaults to None.
+        draw_axes (bool, optional) Wheter to draw the Q, R and S axes. Defaults to True.
+        factor (float, optional): Shrink size of Hex by factor. Defaults to 1.
+        alpha (float, optional): Alpha value of colors. Defaults to 0.5.
+        title (str): Set the title of the HexMap. Defaults to "Unnamed Hexmap".
+    """
 
-        fig, ax = plt.subplots(num="HexMap Plotter")
-        fig.tight_layout()
-        ax.invert_yaxis()
-        ax.set_aspect("equal")
-        ax.set_title(title)
+    # TODO add argument textmap in order to map text onto hexes of certain value
+    # Problem atm is scaling of the text, want it relative to the size of hexes so that it fits properly
+    # textmap: Optional[dict[Any, str]] = None,
+    # textmap (dict[Any, str], optional):   Optional dict to map text to different values in the HexMap. Defaults to None.
 
-        if facecolor is not None:
-            ax.set_facecolor(facecolor)
+    try:
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.collections import PatchCollection
+        from matplotlib.patches import Polygon, RegularPolygon
 
-        # for a nice and bright random coloring haha: np.random.random((1, 3)) * 0.6 + 0.4
+    except ImportError as e:
+        warnings.warn(str(e), RuntimeWarning)
+        raise
 
-        if colormap is None:
-            # This draws the hexagons slightly faster since they all get the same appearence
-            hex_list = [
-                Polygon(tuple(hex.polygon_points(size_factor)))  # type: ignore
-                for hex in self.hexes()
-            ]
-            hexagons = PatchCollection(hex_list, facecolor=WHITE, edgecolor=GRAY)
+    WHITE = (0.96, 0.96, 0.94)
+    GRAY = (0.74, 0.74, 0.74)
+    Q = (0.35, 0.7, 0.0, 0.6)
+    R = (0.11, 0.64, 0.91, 0.6)
+    S = (0.9, 0.1, 0.9, 0.6)
 
-        else:
-            # This draws the hexagons slightly slower but gives individiual colors to the ones with values specified in the colormap
-            hex_list = [
-                Polygon(
-                    tuple(hex.polygon_points(size_factor)),  # type: ignore
-                    facecolor=colormap[value] if value in colormap else WHITE,
-                    edgecolor=GRAY,
+    fig, ax = plt.subplots(num="HexMap plot")
+    fig.tight_layout()
+    ax.invert_yaxis()
+    ax.set_aspect("equal")
+    ax.set_title(title)
+
+    if facecolor is not None:
+        ax.set_facecolor(facecolor)
+
+    # for a nice and bright random coloring haha: np.random.random((1, 3)) * 0.6 + 0.4
+
+    if colormap is None:
+        # This draws the hexagons slightly faster since they all get the same appearence
+        hex_list = [
+            Polygon(tuple(hex.polygon_points(size_factor)))  # type: ignore
+            for hex in hxmp.hexes()
+        ]
+        hexagons = PatchCollection(hex_list, facecolor=WHITE, edgecolor=GRAY)
+
+    else:
+        # This draws the hexagons slightly slower but gives individiual colors to the ones with values specified in the colormap
+        hex_list = [
+            Polygon(
+                tuple(hex.polygon_points(size_factor)),  # type: ignore
+                facecolor=colormap[value] if value in colormap else WHITE,
+                edgecolor=GRAY,
+            )
+            for hex, value in hxmp.items()
+        ]
+        hexagons = PatchCollection(hex_list, match_original=True)
+
+    ax.add_collection(hexagons)  # type: ignore
+
+    origin = hxmp.hexorigin.to_point()
+    diagonal = hxmp.hexorigin + Hex(2, -1)
+
+    if draw_axes:
+        # Draw q, r and s axes
+
+        for col, lbl in zip((Q, R, S), ("Q-axis", "R-axis", "S-axis")):
+            ax.axline(origin, diagonal.to_point(), color=col, label=lbl)
+            # , zorder=0) Used to set axline behind patches
+
+            # Rotate the diagonal inplace to the right around hex origin two steps
+            diagonal >>= (hxmp.hexorigin, 2)
+
+    else:
+        # If this is left out, then no patches will be shown!
+        ax.plot(origin.x, origin.y)
+
+    # This is used to display q, r and s values in the top right of the window
+    def coord_display(x, y):
+        x, y = round(x, 1), round(y, 1)
+        hexagon = Hex.from_point((x, y)).rounded(1)
+
+        q, r, s = (round(c, 1) for c in hexagon.cube_coords)
+
+        return f"pixel: {x=}, {y=}\nhex: {q=}, {r=}, {s=}"
+
+    # link the coord_display function to the axis object
+    ax.format_coord = coord_display
+
+    # TODO make text size relative to ax window size
+
+    if draw_text:
+        # phis = np.arange((1 / 2), -(5 / 6), -(2 / 3))
+        phis = np.array(((1 / 2), -(1 / 6), -(5 / 6)))
+
+        phis += (1 / 3) * Hex.hexlayout.orientation.start_angle
+        phis *= np.pi
+
+        # start_angle = (1 / 3) * np.pi * Hex.layout.orientation.start_angle
+        # start_angle -= (1 / 6) * np.pi
+
+        hx_size = Hex.hexlayout.size
+
+        for hx in hxmp:
+            coords = "qrs" if hx == Hexigo else (hx.q, hx.r, hx.s)
+            center = hx.to_point()
+
+            for phi, coord, color in zip(phis, coords, (Q, R, S)):
+                label_x = center.x + 0.4 * hx_size.x * np.cos(phi)
+                label_y = center.y + 0.4 * hx_size.y * -np.sin(phi)
+
+                plt.text(
+                    label_x,
+                    label_y,
+                    f"{coord:^3}",
+                    va="center",
+                    ha="center",
+                    color=color,
+                    weight="bold",
+                    size=hx_size.x,
                 )
-                for hex, value in self.items()
-            ]
-            hexagons = PatchCollection(hex_list, match_original=True)
 
-        ax.add_collection(hexagons)  # type: ignore
+    if show_directly:
+        plt.show()
 
-        origin = self.hexorigin.to_point()
-        diagonal = self.hexorigin + Hex(2, -1)
-
-        if draw_axes:
-            # Draw q, r and s axes
-
-            for col, lbl in zip((Q, R, S), ("Q-axis", "R-axis", "S-axis")):
-                ax.axline(origin, diagonal.to_point(), color=col, label=lbl)
-                # , zorder=0) Used to set axline behind patches
-
-                # Rotate the diagonal inplace to the right around hex origin two steps
-                diagonal >>= (self.hexorigin, 2)
-
-        else:
-            # If this is left out, then no patches will be shown!
-            ax.plot(origin.x, origin.y)
-
-        # This is used to display q, r and s values in the top right of the window
-        def coord_display(x, y):
-            x, y = round(x, 1), round(y, 1)
-            hexagon = Hex.from_point((x, y)).rounded(1)
-
-            q, r, s = (round(c, 1) for c in hexagon.cube_coords)
-
-            return f"pixel: {x=}, {y=}\nhex: {q=}, {r=}, {s=}"
-
-        # link the coord_display function to the axis object
-        ax.format_coord = coord_display
-
-        # TODO make text size relative to ax window size
-
-        if draw_text:
-            # phis = np.arange((1 / 2), -(5 / 6), -(2 / 3))
-            phis = np.array(((1 / 2), -(1 / 6), -(5 / 6)))
-
-            phis += (1 / 3) * Hex.layout.orientation.start_angle
-            phis *= np.pi
-
-            # start_angle = (1 / 3) * np.pi * Hex.layout.orientation.start_angle
-            # start_angle -= (1 / 6) * np.pi
-
-            hx_size = Hex.layout.size
-
-            for hx in self:
-                coords = "qrs" if hx == Hexigo else (hx.q, hx.r, hx.s)
-                center = hx.to_point()
-
-                for phi, coord, color in zip(phis, coords, (Q, R, S)):
-                    label_x = center.x + 0.4 * hx_size.x * np.cos(phi)
-                    label_y = center.y + 0.4 * hx_size.y * -np.sin(phi)
-
-                    plt.text(
-                        label_x,
-                        label_y,
-                        f"{coord:^3}",
-                        va="center",
-                        ha="center",
-                        color=color,
-                        weight="bold",
-                        size=hx_size.x,
-                    )
-
-        if show_directly:
-            plt.show()
-
-        return fig, ax
+    return fig, ax
 
 
 def show():
@@ -837,18 +1013,6 @@ def hexagon(
     return hxmp
 
 
-def _axrange(r: int | tuple[int, int]):
-    """Internal TODO
-
-    Args:
-        r (int | tuple[int, int]): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    return range(-r, r + 1) if isinstance(r, int) else range(r[0], r[1] + 1)
-
-
 def parallelogram(
     axes: dict[str, int | tuple[int, int]] = {"q": 2, "r": 1},
     value: Any = None,
@@ -860,8 +1024,8 @@ def parallelogram(
     Args:
         axes (_type_, optional): _description_. Defaults to {"q": 2, "r": 2}.
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): _description_. Defaults to Hexigo.
-        hollow (bool, optional): _description_. Defaults to False.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
         HexMap: The parallelogram HexMap
@@ -887,8 +1051,9 @@ def parallelogram(
     hxmp = HexMap(default_value=value, origin_offset=hexorigin)
 
     ax1, ax2 = axes
-    range1 = _axrange(axes[ax1])
-    range2 = _axrange(axes[ax2])
+    v1, v2 = axes.values()
+    range1 = range(-v1, v1 + 1) if isinstance(v1, int) else range(v1[0], v1[1] + 1)
+    range2 = range(-v2, v2 + 1) if isinstance(v2, int) else range(v2[0], v2[1] + 1)
 
     for c1 in range1:
         if not hollow or c1 == min(range1) or c1 == max(range1):
@@ -909,22 +1074,24 @@ def parallelogram(
 def rhombus(
     size: int | tuple[int, int] = 1,
     axes: str | tuple[str, str] = "qs",
-    **kwargs,
+    value: Any = None,
+    hexorigin: Hex = Hexigo,
+    hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a rhombus (aka diamond) ⬧
 
     Args:
         size (int, optional): _description_. Defaults to 1.
         axes (str | tuple[str, str], optional): _description_. Defaults to ("q", "s").
-        value (Any, optional): The value that should initially be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): _description_. Defaults to Hexigo.
-        hollow (bool, optional): _description_. Defaults to False.
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
         HexMap: The rhombus HexMap
     """
-
-    return parallelogram({axes[0]: size, axes[1]: size}, **kwargs)
+    # TODO When available remove: value, hexorigin, hollow in favor for type-annotated kwargs
+    return parallelogram({axes[0]: size, axes[1]: size}, value, hexorigin, hollow)
 
 
 def rectangle(
@@ -934,9 +1101,16 @@ def rectangle(
     hollow: bool = False,
 ) -> HexMap:  # sourcery skip: default-mutable-arg
     """Create a HexMap in the shape of a Rectangle ▬
-    :param radius: The number of hexes from the center
-    :param value: The value that should be assigned to all Hexagons
-    :return: The rectangle HexMap"""
+
+    Args:
+        axes (_type_, optional): _description_. Defaults to {"q": (-3, 3), "r": (-2, 2)}.
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
+
+    Returns:
+        HexMap: The rectangle HexMap
+    """
 
     # for (int r = top; r <= bottom; r++) { // pointy top
     #     int r_offset = floor(r/2.0); // or r>>1
@@ -982,14 +1156,21 @@ def square(
     value: Any = None,
     hexorigin: Hex = Hexigo,
     hollow: bool = False,
-) -> (
-    HexMap
-):  # TODO When available remove: value, hexorigin, hollow in favor for type-annotated kwargs
+) -> HexMap:
     """Create a HexMap in the shape of a Square ■
-    :param radius: The number of hexes from the center
-    :param value: The value that should be assigned to all Hexagons
-    :return: The square HexMap"""
 
+    Args:
+        size (int | tuple[int, int], optional): _description_. Defaults to 1.
+        axes (str | tuple[str, str], optional): _description_. Defaults to "qr".
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
+
+    Returns:
+        HexMap: The square HexMap
+    """
+
+    # TODO When available remove: value, hexorigin, hollow in favor for type-annotated kwargs
     return rectangle({axes[0]: size, axes[1]: size}, value, hexorigin, hollow)
 
 
@@ -1001,10 +1182,17 @@ def triangle(
     hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a Triangle ▲
-    :param radius: The number of hexes from the center
-    :param value: The value that should be assigned to all Hexagons
-    :return: The triangle HexMap"""
 
+    Args:
+        size (int | tuple, optional): _description_. Defaults to 1.
+        axes (str | tuple[str, str], optional): _description_. Defaults to "qr".
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
+
+    Returns:
+        HexMap: The triangle HexMap
+    """
     # for (int q = 0; q <= map_size; q++) {
     #     for (int r = 0; r <= map_size - q; r++) {
     #         map.insert(Hex(q, r, -q-r));
@@ -1040,11 +1228,24 @@ def triangle(
     return hxmp
 
 
-# def star(value: Any = None, axes: str = "qs") -> HexMap:
+# def star(
+#     size: Any = None,
+#     value: Any = None,
+#     hexorigin: Hex = Hexigo,
+#     hollow: bool = False,
+# ) -> HexMap:
 #     """Create a HexMap in the shape of a Star ★ ✡
-#     :param radius: The number of hexes from the center
-#     :param value: The value that should be assigned to all Hexagons
-#     :return: The star HexMap"""
+
+#     Args:
+#         value (Any, optional): _description_. Defaults to None.
+#         axes (str, optional): _description_. Defaults to "qs".
+#         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+#         hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+#         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
+
+#     Returns:
+#         HexMap: The star HexMap
+#     """
 
 
 def polygon(
@@ -1053,13 +1254,19 @@ def polygon(
     hexorigin: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:
-    """_summary_
+    """Create a general shape polygon from an iterable of Hexes
+
+    Note:
+        Hollow is not yet supported.
 
     Args:
-        hexes (Iterable[Hex]): The hexes that the polygon will use as corners.
+        hexes (list[Hex] | tuple[Hex, ...]): The hexes that the polygon will use as corners.
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  NOT SUPPORTED YET: Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
-        HexMap: _description_
+        HexMap: The general polygon HexMap
     """
 
     def current_and_next(hxs) -> zip[tuple[Hex, Hex]]:
@@ -1068,7 +1275,7 @@ def polygon(
     hxmp = HexMap(default_value=value, origin_offset=hexorigin)
 
     for curr_hx, next_hx in current_and_next(hexes):
-        for hx in curr_hx.linedraw_to(next_hx):
+        for hx in curr_hx.linedraw(next_hx):
             hxmp.insert(hx)
 
     # for hx in hexes:

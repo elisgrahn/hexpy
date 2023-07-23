@@ -4,7 +4,7 @@ import math
 import pygame as p
 from PIL import Image
 
-from hexpy import Hex, hexclock, hexlayout, hexmap
+from hexpy import Hex, hexmap
 
 ctypes.windll.user32.SetProcessDPIAware()
 
@@ -42,16 +42,16 @@ def update(board: hexmap.HexMap, r: int) -> hexmap.HexMap:
     """Update the game of life HexMap"""
 
     new_hexmap = board.copy()
-    new_hexmap.set_all(BLACK)
+    new_hexmap.update_all(BLACK)
 
-    for hex in board.hexes():
+    for hx in board.hexes():
         ctr = sum(
             neighbor in board and board[neighbor] == WHITE
-            for neighbor in hex.direct_neighbors
+            for neighbor in hx.direct_neighbors
         )
 
         if ctr == 2:
-            new_hexmap.set(hex, WHITE)
+            new_hexmap.insert(hx, WHITE)
 
     return new_hexmap
 
@@ -103,7 +103,7 @@ while run:
                 play = not play
 
             elif event.key == p.K_c:
-                board.set_all(value=BLACK)
+                board.update_all(value=BLACK)
 
         elif not play:
             if event.type == p.MOUSEBUTTONDOWN:

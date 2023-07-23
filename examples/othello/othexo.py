@@ -1,9 +1,9 @@
 import ctypes
 import math
 
-import othexo_functions as othexo
 import pygame as p
 
+import othexo_functions as othexo
 from hexpy import Hex, Hexigo, hexmap
 
 ctypes.windll.user32.SetProcessDPIAware()
@@ -12,7 +12,7 @@ ctypes.windll.user32.SetProcessDPIAware()
 def draw(surface: p.Surface, hxmp: hexmap.HexMap, red_highlight: Hex | None) -> None:
     "Draw the hexmap on surface while highlighting red_highlight"
 
-    min_size = min(Hex.layout.size)
+    min_size = min(Hex.hexlayout.size)
 
     k = 1  # 0.92
 
@@ -72,16 +72,16 @@ hxmp.pop(Hexigo)
 for i, direction in enumerate(Hexigo.directions):
     hxmp[direction] = -1 if i % 2 else 1
 
-for i, direction in enumerate(Hex.clock[9, 3]):
+for i, direction in enumerate(Hex.o_clock((9, 3))):
     hxmp[direction * 2] = 1 if i % 2 else -1
 
 # Initialise othexo
 othexo.hexboard = hxmp
 othexo.start()
 
-hxmp.plot(
-    {0: "green", 1: "white", -1: "black", 2: "gray", -2: "gray"}, facecolor="brown"
-)
+# hxmp.plot(
+#     {0: "green", 1: "white", -1: "black", 2: "gray", -2: "gray"}, facecolor="brown"
+# )
 
 latest_move = None
 run = True

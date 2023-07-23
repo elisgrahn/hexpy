@@ -1,3 +1,5 @@
+# Author: Elis Grahn
+
 """_summary_
 
 Raises:
@@ -15,12 +17,6 @@ from math import sqrt
 import numpy as np
 
 from .point import Point
-
-
-def __getattr__(name):
-    if name == "hexlayout":
-        return
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 class Orientation:
@@ -113,6 +109,7 @@ class Layout:
         :param origin: The pixel origin, i.e. at what Pixel Hexigo will be
         :param orientation: The orientation of hexagons. Either ``pointy`` ⬢ or ``flat`` ⬣.
         """
+
         if isinstance(origin, (Point, tuple)):
             self.origin = Point(*origin)
 

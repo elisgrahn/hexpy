@@ -24,10 +24,10 @@ def update() -> None:
 
     # Get all positions belonging to current player
     for position in hexboard.get_hexes(turn):
-        for i, neighbor in enumerate(position.direct_neighbors):
+        for i, neighbor in position.direct_neighbors.items():
             # Check that it is in the map/board
             if neighbor in hexboard:
-                update_in_direction(neighbor, position.directions[i])
+                update_in_direction(neighbor, Hex.o_clock(i))
 
 
 def flip(position: Hex) -> None:
@@ -42,13 +42,13 @@ def flip(position: Hex) -> None:
                 flip_in_direction(pos + dir, dir, ctr + 1)
 
             elif ctr > 0 and hexboard[pos] == turn:
-                for to_flip in position.linedraw_to(pos):
+                for to_flip in position.linedraw(pos):
                     hexboard[to_flip] = turn
 
     hexboard[position] = turn
 
-    for i, neighbor in enumerate(position.direct_neighbors):
-        flip_in_direction(neighbor, position.directions[i])
+    for i, neighbor in position.direct_neighbors.items():
+        flip_in_direction(neighbor, Hex.o_clock(i))
 
 
 def start() -> None:

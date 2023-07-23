@@ -1,13 +1,17 @@
+# Author: Elis Grahn
+
 from __future__ import annotations
 
 import math
 from collections.abc import Iterable
 from itertools import cycle, islice
-from typing import Iterator, Optional  # , Self
+from typing import TYPE_CHECKING, Iterator, Optional, overload  # , Self
 
-# This is to avoid circular imports, "Hex" is for instance used in hexclock
-from . import hexclock, hexlayout
+from .layout import Orientation
 from .point import Point
+
+if TYPE_CHECKING:
+    from .navigate import HexClock, HexCompass
 
 
 class Hex:
@@ -19,18 +23,36 @@ class Hex:
         Hex(q=1, r=2, s=-3)
 
         Add two Hex
-        >>> Hex(-1, 2) + Hex(1, 2)
-        Hex(q=0, r=4, s=-4)
+        >>> Hex(1, 2) + Hex(3, 4)
+        Hex(q=3, r=6, s=-10)
 
-        Multiplicate a Hex by 3
-        >>> Hex(1, 2) * 3
-        Hex(q=3, r=6, s= -9)
+        Multiplicate a Hex by 2
+        >>> Hex(1, 2) * 2
+        Hex(q=2, r=4, s= -6)
+
+        Divide a Hex by 2
+        >>> Hex(1, 2) / 2
+        Hex(q=0.5, r=1.0, s=-1.5)
+
+        Divide a Hex by 2 and round the result
+        >>> Hex(1, 2) // 2
+        Hex(q=0, r=2, s=-2)
+
+        Round a Hex
+
+        >>> round(Hex(1.5, 2.5))
+        Hex(q=2, r=2, s=-4)
+
+        Get the length of a Hex
+        >>> len(Hex(1, 2))
+        3
+
+        Get the distance between two Hexes
+        >>> Hex(1, 2).distance(Hex(3, 4))
+        4
     """
 
     __slots__ = ("q", "r")
-
-    layout: hexlayout.Layout
-    clock: hexclock.HexClock
 
     def __init__(
         self,
@@ -99,6 +121,8 @@ class Hex:
                 f"Incorrect coordinates: q + r + s must be equal to 0, but was equal to {coord_sum}"
             )
 
+    # coords
+
     @property
     def cube_coords(self) -> tuple[float, float, float]:
         """Get the cube coords of this Hex
@@ -153,105 +177,7 @@ class Hex:
 
         self.q, self.r = new_coords
 
-    @property
-    def all_neighbors(self) -> tuple[Hex]:
-        """Return the all clock neighbors
-
-        Note:
-            TODO READ THIS: WITH A LINK
-
-        Args:
-            hour (int): The hour to get neighbor in
-
-        Raises:
-            ValueError: If a Layout is not yet defined.
-
-        Returns:
-            Hex: _description_
-        """
-        if self.clock is None:
-            raise ValueError(
-                "'Layout' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
-            )
-
-        return tuple(self + direction for direction in self.clock)
-
-    @property
-    def directions(self) -> tuple[Hex]:
-        """_summary_
-
-        Raises:
-            ValueError: _description_
-
-        Returns:
-            tuple[Hex]: _description_
-        """
-        if self.clock is None:
-            # TODO
-            raise ValueError(
-                "'clock' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
-            )
-
-        return self.clock.directions
-
-    @property
-    def direct_neighbors(self) -> tuple[Hex]:
-        """Return the clock neighbor at hour
-
-        Note:
-            TODO READ THIS: WITH A LINK
-
-        Raises:
-            ValueError: If a Layout is not yet defined.
-
-        Returns:
-            Hex: _description_
-        """
-        if self.clock is None:
-            raise ValueError(
-                "'Layout' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
-            )
-        return tuple(self + direction for direction in self.clock.directions)
-
-    @property
-    def diagonals(self) -> tuple[Hex]:
-        """_summary_
-
-        Returns:
-            tuple[Hex]: _description_
-        """
-        if self.clock is None:
-            # TODO
-            raise ValueError(
-                "'clock' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
-            )
-
-        return self.clock.diagonals
-
-    @property
-    def diagonal_neighbors(self) -> tuple[Hex]:
-        """Return the diagonal clock neighbors
-
-        Note:
-            TODO READ THIS: WITH A LINK
-
-        Args:
-            hour (int): The hour to get neighbor in
-
-        Raises:
-            ValueError: If a Layout is not yet defined.
-
-        Returns:
-            Hex: _description_
-        """
-        if self.clock is None:
-            raise ValueError(
-                "'Layout' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
-            )
-
-        return tuple(self + diagonal for diagonal in self.clock.diagonals)
-
-    def __setitem__(self, coords: tuple[str, ...], values: tuple[float, ...]):
+    def __setitem__(self, coords: tuple[str, ...], values: tuple[float, ...]) -> None:
         """Used to change q, r and s in a dict like manner
 
         Args:
@@ -280,7 +206,156 @@ class Hex:
 
             setattr(self, coord, value)
 
+    def __getitem__(self, coords: tuple[str, ...]) -> tuple[float, ...]:
+        """Used to access q, r and s in a dict like manner
+
+        Args:
+            coords (Iterable[str]): The coords to change
+
+        Returns:
+            tuple[float, ...]: The values of the coords in the same order as the coords provided
+
+        Example:
+            >>> hex = Hex(1, 2, -3)
+            >>> hex['q', 'r'] = (2, 1)
+            >>> hex
+            Hex(q=2, r=1, s=-3)
+        """
+
+        def get_coord(coord: str) -> float:
+            if coord not in {"q", "r", "s"}:
+                raise ValueError(
+                    f"Invalid coordinate: {coord}, must be one of 'q', 'r' or 's'"
+                )
+            return getattr(self, coord)
+
+        return tuple(get_coord(coord) for coord in coords)
+
+    # directions and neighbors
+
+    @property
+    def directions(self) -> HexClock:
+        """_summary_
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            tuple[Hex]: _description_
+        """
+        if not hasattr(self, "hexclock"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
+            )
+        return self.hexclock.directions(self.hexlayout.orientation)
+
+    @property
+    def diagonals(self) -> HexClock:
+        """_summary_
+
+        Returns:
+            tuple[Hex]: _description_
+        """
+        if not hasattr(self, "hexclock"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
+            )
+        return self.hexclock.diagonals(self.hexlayout.orientation)
+
+    @property
+    def direct_neighbors(self) -> HexClock:
+        """Return the clock neighbor at hour
+
+        Note:
+            TODO READ THIS: WITH A LINK
+
+        Raises:
+            ValueError: If a Layout is not yet defined.
+
+        Returns:
+            Hex: _description_
+        """
+        if not hasattr(self, "hexclock"):
+            raise ValueError(
+                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+            )
+
+        return self.directions.shifted(self)
+
+        # return self.hexclock.directions + self
+
+    @property
+    def diagonal_neighbors(self) -> HexClock:
+        """Return the diagonal clock neighbors
+
+        Note:
+            TODO READ THIS: WITH A LINK
+
+        Args:
+            hour (int): The hour to get neighbor in
+
+        Raises:
+            ValueError: If a Layout is not yet defined.
+
+        Returns:
+            Hex: _description_
+        """
+        if not hasattr(self, "hexclock"):
+            raise ValueError(
+                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+            )
+        return self.diagonals.shifted(self)
+
+    @property
+    def all_neighbors(self) -> HexClock:
+        """Return the all clock neighbors
+
+        Note:
+            TODO READ THIS: WITH A LINK
+
+        Args:
+            hour (int): The hour to get neighbor in
+
+        Raises:
+            ValueError: If a Layout is not yet defined.
+
+        Returns:
+            Hex: _description_
+        """
+        if not hasattr(self, "hexclock"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
+            )
+        return self.hexclock.shifted(self)
+
     # rounding
+
+    def round(self, ndigits: Optional[int] = None) -> None:
+        """Inplace round the coordinates of this Hex
+
+        Args:
+            ndigits (int, optional): The number of digits to round to. Defaults to None.
+        """
+
+        # rounded q, r and s
+        q = round(self.q, ndigits)
+        r = round(self.r, ndigits)
+        s = round(self.s, ndigits)
+
+        # diff or delta from rounding
+        dq = abs(q - self.q)
+        ds = abs(r - self.r)
+        dr = abs(s - self.s)
+
+        # in order to avoid getting bad coords, the one with the biggest diff will be calculated from the other two
+        if dq > dr and dq > ds:
+            q = -r - s
+        elif dr > ds:
+            r = -q - s
+        else:
+            s = -q - r
+
+        self.cube_coords = (q, r, s)
 
     def rounded(self, ndigits: Optional[int] = None) -> Hex:
         """Get the rounded coordinates of this Hex
@@ -321,41 +396,13 @@ class Hex:
 
         return Hex(q, r, s)
 
-    def round(self, ndigits: Optional[int] = None) -> None:
-        """Inplace round the coordinates of this Hex
-
-        Args:
-            ndigits (int, optional): The number of digits to round to. Defaults to None.
-        """
-
-        # rounded q, r and s
-        q = round(self.q, ndigits)
-        r = round(self.r, ndigits)
-        s = round(self.s, ndigits)
-
-        # diff or delta from rounding
-        dq = abs(q - self.q)
-        ds = abs(r - self.r)
-        dr = abs(s - self.s)
-
-        # in order to avoid getting bad coords, the one with the biggest diff will be calculated from the other two
-        if dq > dr and dq > ds:
-            q = -r - s
-        elif dr > ds:
-            r = -q - s
-        else:
-            s = -q - r
-
-        self.cube_coords = (q, r, s)
-
     __round__ = rounded
 
     # representations
 
     def __repr__(self) -> str:
-        """Return a nicely formatted Hex representation string"""
+        """Return a nicely formatted HexMap representation string"""
         q, r, s = self.cube_coords
-
         return f"Hex({q=}, {r=}, {s=})"
 
     def __hash__(self) -> int:
@@ -364,16 +411,27 @@ class Hex:
         Returns:
             int: hash of this Hex's axial coords
         """
-
         return hash(self.axial_coords)
 
     # length
 
-    def __len__(self) -> int:
-        """Get the displacement from this Hex to Hexigo"""
+    @property
+    def length(self) -> int:
+        """Get the displacement from this Hex to Hexigo
+
+        Note:
+            This can also be done using ``len(thisHex)``.
+
+        Returns:
+            int: Length, you can think of this as the least amount of Hexes you have to pass through when walking from this Hex to Hexigo.
+        """
         return round((abs(self.q) + abs(self.r) + abs(self.s)) / 2)
 
-    def length(self, other: Optional[Hex] = None) -> int:
+    def __len__(self) -> int:
+        """Get the displacement from this Hex to Hexigo"""
+        return self.length
+
+    def distance(self, other: Hex) -> int:
         """Get the displacement from this Hex to other Hex
 
         Note:
@@ -386,14 +444,14 @@ class Hex:
             TypeError: If ``other`` is not of type ``Hex``.
 
         Returns:
-            int: The length, which can be thought of as the least amount of Hexes you have to pass through when walking from this Hex to other.
+            int: The distance, which can be thought of as the least amount of Hexes you have to pass through when walking from this Hex to other.
         """
         if not isinstance(other, Hex):
             raise TypeError(
-                f"Cannot get length from {self} of type {type(self)} to {other} of type {type(other)}"
+                f"Cannot get distance from {self} of type {type(self)} to {other} of type {type(other)}"
             )
 
-        return len(self) if other is None else len(self - other)
+        return len(self - other)
 
     # negation
 
@@ -654,6 +712,10 @@ class Hex:
 
     __eq__ = equals
 
+    def __bool__(self) -> bool:
+        """Always returns True since it is an object"""
+        return True
+
     def __lt__(self, other: Hex) -> bool:
         """Check if this Hex is closer to Hexigo compared to other Hex"""
         return len(self) < len(other)
@@ -907,24 +969,7 @@ class Hex:
 
     # lerp and linedraw
 
-    def coordinate_range(self, radius: int) -> Iterator[Hex]:
-        """Get all Hexes within a certain radius from this Hex
-
-        Args:
-            radius (int): The radius of the range
-
-        Yields:
-            Iterator[Hex]: The Hexes
-        """
-
-        for q in range(-radius, radius + 1):
-            start = max(-radius, -q - radius)
-            stop = min(+radius, -q + radius)
-
-            for r in range(start, stop + 1):
-                yield self + Hex(q, r)
-
-    def lerp_to(self, other: Hex, t: float) -> Hex:
+    def lerp(self, other: Hex, t: float) -> Hex:
         """Lerp from this Hex to other Hex at fraction ``t``.
 
         Args:
@@ -946,15 +991,15 @@ class Hex:
 
         return self * (1.0 - t) + other * t
 
-    def nudge(self) -> None:
+    def nudge(self, factor: float = 1) -> None:
         """Inplace nudge Hex in a consistent direction.
 
         This is used have get better consistency when for instance landing between two grid cells in lerps.
         """
-        self.q -= 1e-06
-        self.r += 1e-06
+        self.q -= 1e-06 * factor
+        self.r += 1e-06 * factor
 
-    def nudged(self) -> Hex:
+    def nudged(self, factor: float = 1) -> Hex:
         """Nudge Hex in a consistent direction.
 
         This is used have get better consistency when for instance landing between two grid cells in lerps.
@@ -962,9 +1007,9 @@ class Hex:
         Returns:
             Hex: This Hex nudged
         """
-        return Hex(self.q + 1e-06, self.r + 1e-06)
+        return Hex(self.q + 1e-06 * factor, self.r + 1e-06 * factor)
 
-    def linedraw_to(self, other: Hex) -> Iterator[Hex]:
+    def linedraw(self, other: Hex) -> Iterator[Hex]:
         """Yield all Hexes amongst a line between this Hex and other Hex
 
         Args:
@@ -975,7 +1020,7 @@ class Hex:
         """
 
         # Number of hexes that will be reqired
-        steps = self.length(other)
+        steps = self.distance(other)
 
         # nudged_self = self.nudged()
         # nudged_other = other.nudged()
@@ -990,7 +1035,7 @@ class Hex:
         step_size = 1.0 / max(steps, 1)
 
         for i in range(steps + 1):
-            yield self.lerp_to(other, i * step_size).rounded()
+            yield self.lerp(other, i * step_size).rounded()
 
     # points and pixels
 
@@ -1007,14 +1052,14 @@ class Hex:
             Point: The exact center point of this Hex.
         """
 
-        if self.layout is None:
+        if self.hexlayout is None:
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
             )
 
-        O = self.layout.orientation
-        size = self.layout.size
-        origin = self.layout.origin
+        O = self.hexlayout.orientation
+        size = self.hexlayout.size
+        origin = self.hexlayout.origin
 
         x = (O.f0 * self.q + O.f1 * self.r) * size.x
         y = (O.f2 * self.q + O.f3 * self.r) * size.y
@@ -1023,9 +1068,9 @@ class Hex:
 
         # THIS WORKS BUT IS HARDER TO READ AND A FRACTION SLOWER :(
         # transformed = Point(
-        #     *np.matmul(self.layout.orientation.forward, np.array([self.q, self.r]))
+        #     *np.matmul(self.hexlayout.orientation.forward, np.array([self.q, self.r]))
         # )
-        # return transformed * self.layout.size + self.layout.origin
+        # return transformed * self.hexlayout.size + self.hexlayout.origin
 
     def to_pixel(self) -> Point:
         """Convert this Hex to point based on Layout
@@ -1054,13 +1099,13 @@ class Hex:
             Point: A Point which is the offset from the centerpoint to the corner at idx
         """
 
-        if self.layout is None:
+        if self.hexlayout is None:
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
             )
 
-        size = self.layout.size
-        start_angle = self.layout.orientation.start_angle
+        size = self.hexlayout.size
+        start_angle = self.hexlayout.orientation.start_angle
 
         angle = 2.0 * math.pi * (start_angle - idx) / 6.0
         trig_vec = Point(math.cos(angle), math.sin(angle))
@@ -1126,11 +1171,6 @@ class Hex:
         """
         return round(cls.from_point(pixel))
 
-        # pixel = (Point(*pixel) - origin) / size
-
-        # transformed = np.matmul(cls.orientation.backward, np.array([pixel.x, pixel.y]))
-        # return round(Hex(*transformed))
-
     @classmethod
     def from_point(cls, pixel: Point | tuple[float, float]) -> Hex:
         """Return the Hex closest to the provided point based on the Hex layout.
@@ -1148,21 +1188,18 @@ class Hex:
             Hex: The Hex closest to the provided pixel
         """
 
-        if cls.layout is None:
+        if cls.hexlayout is None:
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.layout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
             )
 
-        origin = cls.layout.origin
-        size = cls.layout.size
+        O = cls.hexlayout.orientation
+        size = cls.hexlayout.size
+        origin = cls.hexlayout.origin
 
         pt = Point(*pixel)
         pt -= origin
         pt /= size
-
-        O = cls.layout.orientation
-        size = cls.layout.size
-        origin = cls.layout.origin
 
         q = O.b0 * pt.x + O.b1 * pt.y
         r = O.b2 * pt.x + O.b3 * pt.y
@@ -1174,7 +1211,7 @@ class Hex:
     @classmethod
     def pointy_layout(
         cls,
-        size: int | tuple[int, int],
+        size: int | tuple[int, int] = 1,
         origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
@@ -1183,13 +1220,16 @@ class Hex:
             size (int | Point | tuple[int, int]): _description_
             origin (Point | tuple[int, int]): _description_
         """
-        cls.layout = hexlayout.pointy(size, origin)
-        cls.clock = hexclock.pointy()
+        from . import layout, navigate
+
+        cls.hexlayout = layout.pointy(size, origin)
+        cls.hexclock = navigate.pointy_clock()
+        cls.hexcompass = navigate.pointy_compass()
 
     @classmethod
     def flat_layout(
         cls,
-        size: int | tuple[int, int],
+        size: int | tuple[int, int] = 1,
         origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
@@ -1198,25 +1238,99 @@ class Hex:
             size (int | Point | tuple[int, int]): _description_
             origin (Point | tuple[int, int]): _description_
         """
-        cls.layout = hexlayout.flat(size, origin)
-        cls.clock = hexclock.flat()
+        from . import layout, navigate
+
+        cls.hexlayout = layout.flat(size, origin)
+        cls.hexclock = navigate.flat_clock()
+        cls.hexcompass = navigate.flat_compass()
 
     @classmethod
     def custom_layout(
         cls,
-        orientation: hexlayout.Orientation,
-        size: int | tuple[int, int],
+        orientation: Orientation,
+        size: int | tuple[int, int] = 1,
         origin: tuple[int, int] = (0, 0),
+        clockdict: Optional[dict[int, Hex]] = None,
+        compassdict: Optional[dict[str, Hex]] = None,
     ) -> None:
         """_summary_
 
         Args:
-            orientation (hexlayout.Orientation): _description_
-            size (int | Point | tuple[int, int]): _description_
-            origin (Point | tuple[int, int]): _description_
+            orientation (Orientation): _description_
+            size (int | tuple[int, int], optional): _description_. Defaults to 1.
+            origin (tuple[int, int], optional): _description_. Defaults to (0, 0).
+            clockdict (Optional[dict[int, Hex]], optional): _description_. Defaults to None.
+            compassdict (Optional[dict[str, Hex]], optional): _description_. Defaults to None.
         """
-        cls.layout = hexlayout.custom(orientation, size, origin)
-        cls.clock = hexclock.pointy()
+        from . import layout, navigate
+
+        cls.hexlayout = layout.custom(orientation, size, origin)
+        if clockdict is not None:
+            cls.hexclock = navigate.custom_clock(clockdict)
+        if compassdict is not None:
+            cls.hexcompass = navigate.custom_compass(compassdict)
+
+    @classmethod
+    @overload
+    def o_clock(cls, hours: int) -> Hex:
+        ...
+
+    @classmethod
+    @overload
+    def o_clock(cls, hours: tuple[int, ...]) -> HexClock:
+        ...
+
+    @classmethod
+    def o_clock(cls, hours: int | tuple[int, ...]) -> Hex | HexClock:
+        """_summary_
+
+        Args:
+            hours (int | tuple[int, ...]): _description_
+
+        Raises:
+            RuntimeError: _description_
+
+        Returns:
+            Hex | HexClock: _description_
+        """
+
+        if not hasattr(cls, "hexclock"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout(*args)', 'Hex.pointy_layout(*args)' or 'Hex.custom_layout(*args)'"
+            )
+
+        return cls.hexclock[hours]
+
+    @classmethod
+    @overload
+    def compass(cls, points: str) -> Hex:
+        ...
+
+    @classmethod
+    @overload
+    def compass(cls, points: tuple[str, ...]) -> HexCompass:
+        ...
+
+    @classmethod
+    def compass(cls, points: str | tuple[str, ...]) -> Hex | HexCompass:
+        """_summary_
+
+        Args:
+            points (str | tuple[str, ...]): _description_
+
+        Raises:
+            RuntimeError: _description_
+
+        Returns:
+            Hex | HexCompass: _description_
+        """
+
+        if not hasattr(cls, "hexcompass"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout(*args)', 'Hex.pointy_layout(*args)' or 'Hex.custom_layout(*args)'"
+            )
+
+        return cls.hexcompass[points]
 
 
 Hexigo = Hex(0, 0)

@@ -6,6 +6,9 @@ dev/
 tests
 /res/hidden/
 example_google.py
+/hexpyi
+/hexpy/hexmath.py
+/animate_logo_test
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python
