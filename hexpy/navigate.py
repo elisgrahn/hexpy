@@ -103,6 +103,9 @@ class HexClock(dict):
     def __iter__(self) -> Generator[Hex, None, None]:
         yield from super().values()
 
+    def __in__(self, value) -> bool:
+        return value in self.values()
+
     def __str__(self) -> str:
         """Return a nicely formatted HexMap representation string"""
         return super().__repr__().replace("), ", "),\n ")
@@ -245,6 +248,9 @@ class HexCompass(dict):
 
     def __iter__(self) -> Generator[Hex, None, None]:
         yield from super().values()
+
+    def __in__(self, value) -> bool:
+        return value in self.values()
 
     def __str__(self) -> str:
         """Return a nicely formatted HexMap representation string"""

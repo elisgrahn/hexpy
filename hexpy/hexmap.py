@@ -56,15 +56,19 @@ import pickle
 import warnings
 from collections.abc import Iterable
 from math import floor
-from pathlib import Path
-from typing import Any, Callable, Generator, Iterator, Optional, overload
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, Optional, overload
+
+from argon2 import Type
+
+if TYPE_CHECKING:
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+    from pathlib import Path
 
 from _collections_abc import dict_items, dict_keys, dict_values
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 
 from .hexclass import Hex, Hexigo
-from .navigate import HexClock, HexCompass  # NOTE CIRCLE?
+from .navigate import HexClock, HexCompass
 
 # import dill # TODO maybe replace pickle with dill
 
@@ -88,7 +92,7 @@ def fromdict(
     """Create a HexMap from the given dict with Hex as keys
 
     Args:
-        hexes (dict[Hex, Any]): A dict with ``Hex`` as keys
+        hexes (dict[Hex, Any]): A dict with `Hex` as keys
         value (Any, optional): Value that will be assigned to new Hexes added to HexMap. Defaults to None.
         hexorigin (Hex, optional): Origin of the HexMap, all new Hexes will be offset by hexorigin. Defaults to Hexigo.
 
@@ -99,12 +103,12 @@ def fromdict(
 
 
 def fromkeys(
-    hexes: Iterable[Hex], value: Any = None, hexorigin: Hex = Hexigo
+    hexes: Hex | Iterable[Hex], value: Any = None, hexorigin: Hex = Hexigo
 ) -> HexMap:
-    """Create a new HexMap from the given iterable of Hex
+    """Create a new HexMap from a single Hex or the given iterable of Hex
 
     Args:
-        hexes (dict[Hex, Any]): An iterable of ``Hex``
+        hexes (dict[Hex, Any]): An iterable of `Hex`
         value (Any, optional): Value that will be assigned to new Hexes added to HexMap. Defaults to None.
         hexorigin (Hex, optional): Origin of the HexMap, all new Hexes will be offset by hexorigin. Defaults to Hexigo.
     Raises:
@@ -113,10 +117,16 @@ def fromkeys(
     Returns:
         HexMap: _description_
     """
-    if not isinstance(hexes, Iterable):
-        raise TypeError("'hexes' must be an iterable of 'Hex'")
+    if isinstance(hexes, Hex):
+        hexes = dict.fromkeys([hexes], value)
 
-    hexes = dict.fromkeys(hexes, value)
+    elif isinstance(hexes, Iterable):
+        hexes = dict.fromkeys(hexes, value)
+
+    else:
+        raise TypeError(
+            f"hexes must be of type 'Hex' or 'Iterable[Hex]', not {type(hexes)}"
+        )
 
     return HexMap(hexes, default_value=value, origin_offset=hexorigin)
 
@@ -125,10 +135,10 @@ def open(filepath: str) -> HexMap:
     """Open a saved HexMap at filepath
 
     Args:
-        filepath (str): Path to the HexMap ``.pkl`` file
+        filepath (str): Path to the HexMap `.pkl` file
 
     Returns:
-        HexMap: HexMap saved at ``filepath``
+        HexMap: HexMap saved at `filepath`
     """
 
     with builtins.open(filepath, "rb") as f:
@@ -136,7 +146,7 @@ def open(filepath: str) -> HexMap:
 
 
 class HexMap(dict):
-    """A dict, with ``hexpy.Hex`` as keys, which representing a generic Hexagonal grid
+    """A dict, with `hexpy.Hex` as keys, which representing a generic Hexagonal grid
 
     To create :py:class:`hexpy.HexMap.HexMap` objects, use an appropriate factory
     function. There's hardly ever any reason to call the HexMap constructor directly.
@@ -170,7 +180,7 @@ class HexMap(dict):
                 "HexMaps can only be created initiated from dicts, if you need to create a HexMap from another Hex iterable use 'hexmap.fromkeys()'"
             )
 
-        elif not all(isinstance(hex, Hex) for hex in hexes):
+        elif not all(isinstance(hx, Hex) for hx in hexes):
             raise TypeError("All keys in a HexMap must be of type Hex")
 
         else:
@@ -268,13 +278,13 @@ class HexMap(dict):
             Iterator[Hex]: _description_
         """
 
-        for hex, value in self.items():
+        for hx, value in self.items():
             if (
                 isinstance(desired_values, Iterable)
                 and value in desired_values
                 or value == desired_values
             ):
-                yield hex
+                yield hx
 
     def __iter__(self) -> Generator[Hex, None, None]:
         yield from super().__iter__()
@@ -307,10 +317,10 @@ class HexMap(dict):
         """Get value(s) at self[key]
 
         Args:
-            __key (Hex | HexMap): If a ``Hex`` is provided only that Hex assigned value will be returned and if a ``HexMap`` is provided all values from this HexMap that overlap with other will be returned
+            __key (Hex | HexMap): If a `Hex` is provided only that Hex assigned value will be returned and if a `HexMap` is provided all values from this HexMap that overlap with other will be returned
 
         Raises:
-            TypeError: If ``__key`` is not of type ``Hex`` or ``HexMap``
+            TypeError: If `__key` is not of type `Hex` or `HexMap`
 
         Returns:
             Any | tuple[Any, ...]: Either the single value or all the values from the intersecting HexMaps
@@ -345,14 +355,14 @@ class HexMap(dict):
         | Generator[bool, None, None],
         __value: Any,
     ) -> None:
-        """Set ``self[key]`` to ``value``.
+        """Set `self[key]` to `value`.
 
         Args:
-            __key (Hex | HexMap): If a ``Hex`` is provided only that will be set and if a ``HexMap`` is provided all Hexes in this HexMap will be changed to the provided
+            __key (Hex | HexMap): If a `Hex` is provided only that will be set and if a `HexMap` is provided all Hexes in this HexMap will be changed to the provided
             __value (Any): The value to set to
 
         Raises:
-            TypeError: If ``__key`` is not of type ``Hex`` or ``HexMap``
+            TypeError: If `__key` is not of type `Hex` or `HexMap`
         """
 
         if isinstance(__key, Hex):
@@ -378,7 +388,32 @@ class HexMap(dict):
 
     # update
 
-    def insert(self, hexes: Hex | tuple[Hex, ...] | HexMap, value: Any = None) -> None:
+    import pandas as pd
+
+    def pop(self, hexes: Hex | Iterable[Hex], default: Any = None) -> Any:
+        """Pop a Hex from the HexMap and return its value
+
+        Args:
+            hx (Hex): The Hex to pop
+            default (Any): The value to return if the Hex is not in the HexMap
+
+        Returns:
+            Any: The value of the popped Hex
+        """
+        if isinstance(hexes, Hex):
+            return super().pop(hexes, None)
+
+        elif isinstance(hexes, Iterable):
+            return tuple(self.pop(hx) for hx in hexes)
+
+        else:
+            raise TypeError(
+                f"hexes must be of type 'Hex' or 'Iterable[Hex]', not {type(hexes)}"
+            )
+
+    def insert(
+        self, hexes: Hex | tuple[Hex, ...] | HexMap, value: Optional[Any] = None
+    ) -> None:
         """Insert a Hex or whole HexMap in this HexMap with an optional value otherwise set to default value
 
         Args:
@@ -387,46 +422,91 @@ class HexMap(dict):
             value (Any, optional): The value to assign to new Hexes. Defaults to self.default.
 
         Raises:
-            TypeError: If ``hex_or_hexmap`` is not of type ``Hex`` or ``HexMap``
+            TypeError: If `hex_or_hexmap` is not of type `Hex` or `HexMap`
         """
         if isinstance(hexes, (Hex, tuple, HexMap)):
-            self[hexes] = self.default if value is None else value
+            self[hexes] = value or self.default
 
         else:
             raise TypeError(
                 f"Argument hexes was provided {hexes} of type {type(hexes)} which is neither a Hex, a tuple of Hex nor a HexMap"
             )
 
-    def update(self, hexes: dict[Hex, Any] | HexMap) -> None:
-        """_summary_
-
-        Args:
-            hexes (dict[Hex, Any] | HexMap): _description_
-        """
-        if isinstance(hexes, HexMap):
-            super().update(hexes)
-
-        elif isinstance(hexes, dict):
-            if all(isinstance(hex, Hex) for hex in hexes):
-                super().update(hexes)
-
-        else:
-            raise TypeError(
-                f"Argument hexes was provided {hexes} of type {type(hexes)} which is neither a HexMap nor a dict"
-            )
+    # changing
 
     def update_all(self, value: Any = None) -> None:
-        """Set all Hexes (keys) to a certain value
+        """Update all Hexes (keys) to a certain value
 
         Args:
             value (Any, optional): The value to change Hexes to. Defaults to self.default.
         """
+        self.update(self.fromkeys(self.keys(), value or self.default))
 
-        if value is None:
-            value = self.default
+    def apply(self, func: Callable[[Any], Any], *args, **kwargs) -> HexMap:
+        """Apply a function to all values in this HexMap
 
-        # update all of the values in the hexmap
-        self.update(self.fromkeys(self.keys(), value))
+        Args:
+            func (Callable[[Any], Any]): Function to apply, takes and returns one value.
+            *args: Arguments to pass along to func
+            **kwargs: Keyword arguments to pass along to func
+
+        Returns:
+            HexMap: A new HexMap where values have been passed through the function
+
+        Example:
+            Multiply all values in the HexMap by three
+
+            >>> hxmp = hexmap.fromdict({Hex(1, 2): 1, Hex(3, 4): 3})
+            >>> hxmp.apply(func=lambda v: 3 * v)
+            {Hex(q=1, r=2, s=-3): 3,
+             Hex(q=3, r=4, s=-7): 9}
+        """
+        return self._new(
+            {hx: func(value, *args, **kwargs) for hx, value in self.items()}
+        )
+
+    def apply_inplace(self, func: Callable[[Any], Any], *args, **kwargs) -> None:
+        """Inplace apply a function to all values in this HexMap
+
+        Args:
+            func (Callable[[Any], Any]): Function to apply, takes and returns one value.
+            *args: Arguments to pass along to func
+            **kwargs: Keyword arguments to pass along to func
+
+        Example:
+            Inplace multiply all values in the HexMap by three
+
+            >>> hxmp = hexmap.fromdict({Hex(1, 2): 1, Hex(3, 4): 3})
+            >>> hxmp.apply_inplace(func=lambda v: 3 * v)
+            >>> hxmp
+            {Hex(q=1, r=2, s=-3): 3,
+             Hex(q=3, r=4, s=-7): 9}
+        """
+
+        self.update({hx: func(value, *args, **kwargs) for hx, value in self.items()})
+
+    def transform(self, func: Callable[[Hex], Hex], *args, **kwargs) -> HexMap:
+        """Transform the HexMap by applying a function to all hexes.
+
+        Args:
+            func (Callable[[Hex], Hex]): Function to apply, takes and returns one Hex.
+            *args: Arguments to pass along to func
+            **kwargs: Keyword arguments to pass along to func
+
+        Returns:
+            HexMap: A new HexMap where hexes have been passed through the function
+
+        Example:
+            Multiply all hexes in the HexMap by 3
+
+            >>> hxmp = hexmap.fromdict({Hex(1, 2): 1, Hex(3, 4): 3})
+            >>> hxmp.transform(func=lambda hx: 3 * hx)
+            {Hex(q=3, r=6, s=-9): 1,
+             Hex(q=9, r=12, s=-21): 3}
+        """
+        return self._new(
+            {func(hx, *args, **kwargs): value for hx, value in self.items()}
+        )
 
     # comparison
 
@@ -495,7 +575,7 @@ class HexMap(dict):
             other (HexMap): The other HexMap
 
         Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+            TypeError: If `other` is not of type `HexMap`
 
         Returns:
             HexMap: A union of this HexMap and other where
@@ -505,53 +585,53 @@ class HexMap(dict):
             return self._new({**self, **other})
 
         else:
-            raise TypeError(
-                f"Argument other was provided {other} of type {type(other)} which is not a HexMap"
-            )
+            raise TypeError(f"other must be of type 'HexMap', not {type(other)}")
 
     def __add__(self, other: Hex | HexMap) -> HexMap:
-        """Move all Hexes in this HexMap by another Hex or get the union of this HexMap and other
+        """Move all Hexes in this HexMap by other Hex or get the union of this HexMap and other
 
         Args:
             other (Hex | HexMap): If a Hex is provided all Hexes in this HexMap will be offset by other, but
                 if a HexMap is provided all Hexes in other will be added to this HexMap.
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex`` or ``HexMap``
+            TypeError: If `other` is not of type `Hex` or `HexMap`
 
         Returns:
             HexMap: This HexMap shifted or a union of this HexMap and other
         """
 
         if isinstance(other, Hex):
-            return self._new({hex + other: value for hex, value in self.items()})
+            return self._new({hx + other: value for hx, value in self.items()})
 
         elif isinstance(other, HexMap):
             return self | other
 
         else:
             raise TypeError(
-                f"Argument other was provided {other} of type {type(other)} which is neither a Hex nor a HexMap"
+                f"other must be of type 'Hex' or 'HexMap', not {type(other)}"
             )
+
+    __radd__ = __add__
 
     def union(
         self,
-        other: HexMap,
+        other: HexMap,  # TODO ALLOW MULTIPLE HEXMAPS TO BE UNIONED SIMULTANIOUSLY
         func: Optional[Callable[[Any, Any], Any]] = None,
     ) -> HexMap:
-        """Get union of this HexMap and other,
+        """Return the union of this HexMap and other.
 
-        The order matters since values from ``other`` will be used for the intersection
+        The order matters since values from `other` will be used for the intersection
 
         Note:
-            This can also be done using the operators ``|`` or ``+`` between two ``HexMap`` objects.
+            This can also be done using the operators `|` or `+` between two `HexMap` objects.
 
         Args:
-            other (HexMap): The other ``HexMap``.
+            other (HexMap): The other `HexMap`.
             func (Callable[[Any, Any], Any], optional): A function that will be applied to all values of intersecting Hexes.
                 If omitted the values of this HexMap will be preserved. Defaults to None.
         Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+            TypeError: If `other` is not of type `HexMap`
 
         Returns:
             HexMap: The union as a new HexMap
@@ -590,7 +670,7 @@ class HexMap(dict):
 
                 return self[k] if k in self else other[k]
 
-            return self._new({k: unite(k) for k in self.keys() | other.keys()})
+            return self._new({hx: unite(hx) for hx in self.keys() | other.keys()})
 
             # self_copy = self.copy()
             # self_copy.update({k: func(self[k], other[k]) for k in other if self.get(k)})
@@ -598,8 +678,78 @@ class HexMap(dict):
             # return self._new({**other, **self_copy})
 
         else:
-            # TODO
-            raise TypeError("")
+            raise TypeError(f"func must be a Callable with two arguments, not {func}")
+
+    def __ior__(self, other: HexMap):  # -> Self:
+        """Get the union of this HexMap and other where values from other will be on the top
+
+        Args:
+            other (HexMap): The other HexMap
+
+        Raises:
+            TypeError: If `other` is not of type `HexMap`
+
+        Returns:
+            HexMap: A union of this HexMap and other where
+        """
+
+        if not isinstance(other, HexMap):
+            raise TypeError(f"other must be of type 'HexMap', not {type(other)}")
+
+        super().update({**self, **other})
+        return self
+
+    def __iadd__(self, other: Hex | HexMap):  # -> Self:
+        """Move all Hexes in this HexMap by other Hex or get the union of this HexMap and other
+
+        Args:
+            other (Hex | HexMap): If a Hex is provided all Hexes in this HexMap will be offset by other, but
+                if a HexMap is provided all Hexes in other will be added to this HexMap.
+
+        Raises:
+            TypeError: If `other` is not of type `Hex` or `HexMap`
+
+        Returns:
+            HexMap: This HexMap shifted or a union of this HexMap and other
+        """
+
+        if isinstance(other, Hex):
+            for hx in self.keys():
+                self[hx] += other
+
+        elif isinstance(other, HexMap):
+            self |= other
+
+        else:
+            raise TypeError(
+                f"other must be of type 'Hex' or 'HexMap', not {type(other)}"
+            )
+
+        return self
+
+    def update(
+        self,
+        other: dict[Hex, Any] | HexMap,
+        func: Optional[Callable[[Any, Any], Any]] = None,
+    ) -> None:
+        """Update the HexMap with the Hex/value pairs from other, overwriting existing Hex.
+
+        Args:
+            other (dict[Hex, Any] | HexMap): The other HexMap or dict to update this HexMap with
+            func (Optional[Callable[[Any, Any], Any]], optional): What to do with the intersecting hexes. Defaults to None.
+
+        Raises:
+            TypeError: If `hexes` is not of type `HexMap` or `dict`
+        """
+        if func is None:
+            super().update(other)
+
+        elif isinstance(func, Callable) and len(inspect.getfullargspec(func).args) == 2:
+            for hx in other.keys() | self.keys():
+                if hx in other:
+                    self[hx] = func(self[hx], other[hx]) if hx in self else other[hx]
+        else:
+            raise TypeError(f"func must be a Callable with two arguments, not {func}")
 
     # intersection
 
@@ -610,14 +760,14 @@ class HexMap(dict):
             other (HexMap): The other HexMap
 
         Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+            TypeError: If `other` is not of type `HexMap`
 
         Returns:
             HexMap: Intersecting Hexes as a HexMap
         """
 
         if isinstance(other, HexMap):
-            return self._new({k: self[k] for k in self.keys() & other.keys()})
+            return self._new({k: other[k] for k in self.keys() & other.keys()})
 
         else:
             raise TypeError(
@@ -632,15 +782,15 @@ class HexMap(dict):
         """Get intersection of this HexMap and other.
 
         Note:
-            This can also be done using the operators ``&`` between two ``HexMap`` objects.
+            This can also be done using the operators `&` between two `HexMap` objects.
 
         Args:
-            other (HexMap): The other ``HexMap``.
+            other (HexMap): The other `HexMap`.
             func (Callable[[Any, Any], Any], optional): A function that will be applied to all values of intersecting Hexes.
                 If omitted the values of this HexMap will be preserved. Defaults to None.
 
         Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+            TypeError: If `other` is not of type `HexMap`
 
         Returns:
             HexMap: The intersection as a new HexMap
@@ -677,27 +827,63 @@ class HexMap(dict):
             )
 
         else:
-            # TODO
-            raise TypeError("")
+            raise TypeError(f"func must be a Callable with two arguments, not {func}")
+
+    def __iand__(self, other: HexMap):  # -> Self:
+        """Intersect two HexMaps.
+
+        Args:
+            other (HexMap): The other HexMap
+
+        Raises:
+            TypeError: If `other` is not of type `HexMap`
+
+        Returns:
+            HexMap: Intersecting Hexes as a HexMap
+        """
+
+        if not isinstance(other, HexMap):
+            raise TypeError(f"other must be of type 'HexMap', not {type(other)}")
+
+        for k in self.keys() - other.keys():
+            self.pop(k)
+
+        return self
+
+    def intersection_update(
+        self, other: HexMap, func: Optional[Callable[[Any, Any], Any]] = None
+    ):  # -> Self:
+        """Update the HexMap with the intersection of itself and other, overwriting existing Hex."""
+
+        if func is None:
+            self &= other
+
+        elif isinstance(func, Callable) and len(inspect.getfullargspec(func).args) == 2:
+            # Remove all Hexes that are other
+            self -= other
+
+            self.update(other - self, func)
+        else:
+            raise TypeError(f"func must be a Callable with two arguments, not {func}")
 
     # difference
 
     def __sub__(self, other: Hex | HexMap) -> HexMap:
-        """Move all Hexes in this HexMap by another Hex or get the difference of this HexMap and other
+        """Move all Hexes in this HexMap by other Hex or get the difference of this HexMap and other
 
         Args:
             other (Hex | HexMap): If a Hex is provided all Hexes in this HexMap will be offset by other, but
                 if a HexMap is provided all Hexes that overlap with this HexMap other will be removed.
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex`` or ``HexMap``
+            TypeError: If `other` is not of type `Hex` or `HexMap`
 
         Returns:
             HexMap: This HexMap shifted or a difference of this HexMap and other
         """
 
         if isinstance(other, Hex):
-            return self._new({hex - other: value for hex, value in self.items()})
+            return self._new({hx - other: value for hx, value in self.items()})
 
         elif isinstance(other, HexMap):
             return self._new({k: self[k] for k in self.keys() - other.keys()})
@@ -708,22 +894,67 @@ class HexMap(dict):
             )
 
     def difference(self, other: HexMap) -> HexMap:
-        """Get difference between this HexMap and other, order matters.
+        """Return the difference of two HexMaps as a new HexMap.
 
-        Note:
-            This can also be done using the operator ``-`` between two ``HexMap`` objects.
+        TODO "or more"
 
-        Args:
-            other (HexMap): The other ``HexMap``.
+        Get difference between this HexMap and other, order matters.
 
-        Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+                Note:
+                    This can also be done using the operator `-` between two `HexMap` objects.
 
-        Returns:
-            HexMap: The difference as a new HexMap
+                Args:
+                    other (HexMap): The other `HexMap`.
 
+                Raises:
+                    TypeError: If `other` is not of type `HexMap`
+
+                Returns:
+                    HexMap: The difference as a new HexMap
         """
         return self - other
+
+    def __isub__(self, other: Hex | HexMap):  # -> Self
+        """Remove all elements of another set from this set.
+
+        Args:
+            other (HexMap): The other `HexMap`.
+
+        Raises:
+            TypeError: If `other` is not of type `Hex` or `HexMap`
+
+        Returns:
+            HexMap: This HexMap shifted or a difference of this HexMap and other
+        """
+
+        if isinstance(other, Hex):
+            # Move all Hexes in this HexMap by other Hex
+            new_dict = {k: self[k] - other for k in self.keys()}
+            self.update(new_dict)
+
+        elif isinstance(other, HexMap):
+            # Remove all Hexes that overlap with other
+            for k in self.keys() & other.keys():
+                self.pop(k)
+        else:
+            raise TypeError(
+                f"other must be of type 'Hex' or 'HexMap', not {type(other)}"
+            )
+        return self
+
+    def difference_update(self, other: HexMap):  # -> Self
+        """Remove all elements of another set from this set.
+
+        Args:
+            other (HexMap): The other `HexMap`.
+
+        Raises:
+            TypeError: If `other` is not of type `HexMap`
+        """
+        if not isinstance(other, HexMap):
+            raise TypeError("other must be of type 'HexMap'")
+
+        self -= other
 
     # symmetric difference
 
@@ -734,12 +965,11 @@ class HexMap(dict):
             other (HexMap): The other HexMap
 
         Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+            TypeError: If `other` is not of type `HexMap`
 
         Returns:
             HexMap: Intersecting Hexes as a HexMap
         """
-
         if isinstance(other, HexMap):
             return self._new(
                 {
@@ -757,18 +987,47 @@ class HexMap(dict):
         """Get symmetric difference between this HexMap and other.
 
         Note:
-            This can also be done using the operators ``^`` or ``/`` between two ``HexMap`` objects.
+            This can also be done using the operators `^` between two `HexMap` objects.
 
         Args:
-            other (HexMap): The other ``HexMap``.
+            other (HexMap): The other `HexMap`.
 
         Raises:
-            TypeError: If ``other`` is not of type ``HexMap``
+            TypeError: If `other` is not of type `HexMap`
 
         Returns:
             HexMap: The symmetric difference as a new HexMap
         """
         return self ^ other
+
+    def __ixor__(self, other: HexMap):  # -> Self:
+        """Get symmetric difference of two HexMaps.
+
+        Args:
+            other (HexMap): The other HexMap
+
+        Raises:
+            TypeError: If `other` is not of type `HexMap`
+        """
+
+        if not isinstance(other, HexMap):
+            raise TypeError(f"other must be of type 'HexMap', not {type(other)}")
+
+        for k in other.keys() - self.keys():
+            self[k] = other[k]
+
+        return self
+
+    def symmetric_difference_update(self, other: HexMap):  # -> Self:
+        """Get symmetric difference of two HexMaps.
+
+        Args:
+            other (HexMap): The other HexMap
+
+        Raises:
+            TypeError: If `other` is not of type `HexMap`
+        """
+        self ^= other
 
     # save and plot
 
@@ -776,7 +1035,7 @@ class HexMap(dict):
         """Save a Hexmap at filepath using pickle
 
         Args:
-            filepath (Path | str): Path to where the HexMap ``.pkl`` file should be saved
+            filepath (Path | str): Path to where the HexMap `.pkl` file should be saved
         """
         with builtins.open(filepath, "wb") as f:  # type: ignore
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
@@ -826,7 +1085,9 @@ def plot(
     hex_alpha: float = 0.8,
     facecolor: Optional[Any] = None,
     title: str = "Unnamed Hexmap",
-    show_directly: bool = True,
+    show_directly: bool = False,
+    fig: Optional[Figure] = None,
+    ax: Optional[Axes] = None,
 ) -> tuple[Figure, Axes]:
     """Plot the HexMap using matplotlib
 
@@ -859,9 +1120,18 @@ def plot(
     R = (0.11, 0.64, 0.91, 0.6)
     S = (0.9, 0.1, 0.9, 0.6)
 
-    fig, ax = plt.subplots(num="HexMap plot")
+    # TODO add support for adding this plot as an ax to a prior figure!
+    # if fig is not None and ax is None:
+    #     ax = fig.add_subplot(2, 2, len(fig.get_axes()))
+
+    if ax is None:
+        fig, ax = plt.subplots(num="HexMap plot")
+        ax.invert_yaxis()
+
+    else:
+        fig = ax.get_figure()
+
     fig.tight_layout()
-    ax.invert_yaxis()
     ax.set_aspect("equal")
     ax.set_title(title)
 
@@ -873,8 +1143,8 @@ def plot(
     if colormap is None:
         # This draws the hexagons slightly faster since they all get the same appearence
         hex_list = [
-            Polygon(tuple(hex.polygon_points(size_factor)))  # type: ignore
-            for hex in hxmp.hexes()
+            Polygon(tuple(hx.polygon_points(size_factor)))  # type: ignore
+            for hx in hxmp.hexes()
         ]
         hexagons = PatchCollection(hex_list, facecolor=WHITE, edgecolor=GRAY)
 
@@ -882,11 +1152,11 @@ def plot(
         # This draws the hexagons slightly slower but gives individiual colors to the ones with values specified in the colormap
         hex_list = [
             Polygon(
-                tuple(hex.polygon_points(size_factor)),  # type: ignore
+                tuple(hx.polygon_points(size_factor)),  # type: ignore
                 facecolor=colormap[value] if value in colormap else WHITE,
                 edgecolor=GRAY,
             )
-            for hex, value in hxmp.items()
+            for hx, value in hxmp.items()
         ]
         hexagons = PatchCollection(hex_list, match_original=True)
 
@@ -902,7 +1172,7 @@ def plot(
             ax.axline(origin, diagonal.to_point(), color=col, label=lbl)
             # , zorder=0) Used to set axline behind patches
 
-            # Rotate the diagonal inplace to the right around hex origin two steps
+            # Rotate the diagonal inplace to the right around hexorigin two steps
             diagonal >>= (hxmp.hexorigin, 2)
 
     else:
@@ -960,7 +1230,7 @@ def plot(
     return fig, ax
 
 
-def show():
+def show(*args, **kwargs):
     # TODO TELL USER HOW TO USE THIS
 
     try:
@@ -970,10 +1240,11 @@ def show():
         warnings.warn(str(e), RuntimeWarning)
         raise
 
-    plt.show()
+    plt.show(*args, **kwargs)
 
 
 # NOTE ALL OF THE BELOW IS STILL WORK IN PROGRESS!
+# TODO WHEN SIZE OR RADIUS IS 0, THEN RETURN EMPTY HEXMAP
 
 
 def hexagon(
@@ -1228,24 +1499,28 @@ def triangle(
     return hxmp
 
 
-# def star(
-#     size: Any = None,
-#     value: Any = None,
-#     hexorigin: Hex = Hexigo,
-#     hollow: bool = False,
-# ) -> HexMap:
-#     """Create a HexMap in the shape of a Star ★ ✡
+def star(
+    # size: Any = None,
+    # value: Any = None,
+    # hexorigin: Hex = Hexigo,
+    # hollow: bool = False,
+) -> HexMap:
+    """Create a HexMap in the shape of a Star ★ ✡
 
-#     Args:
-#         value (Any, optional): _description_. Defaults to None.
-#         axes (str, optional): _description_. Defaults to "qs".
-#         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-#         hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
-#         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
+    Args:
+        value (Any, optional): _description_. Defaults to None.
+        axes (str, optional): _description_. Defaults to "qs".
+        value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
+        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
-#     Returns:
-#         HexMap: The star HexMap
-#     """
+    Returns:
+        HexMap: The star HexMap
+    """
+
+    raise NotImplementedError(
+        "Not yet implemented, plan is to make it a special case of 'triangle'"
+    )
 
 
 def polygon(

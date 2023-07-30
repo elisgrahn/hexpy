@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from itertools import cycle, islice
-from typing import TYPE_CHECKING, Iterator, Optional, overload  # , Self
+from re import A
+from typing import TYPE_CHECKING, Iterator, Literal, Optional, overload  # , Self
 
 from .layout import Orientation
 from .point import Point
@@ -47,9 +48,26 @@ class Hex:
         >>> len(Hex(1, 2))
         3
 
+        >>> Hex(1, 2).length
+        3
+
         Get the distance between two Hexes
         >>> Hex(1, 2).distance(Hex(3, 4))
         4
+
+        >>> len(Hex(1, 2) - Hex(3, 4))
+        4
+
+        Rotate a Hex 60 degrees to the left around Hexigo
+        >>> Hex(1, 2) << 1
+        Hex(q=3, r=-1, s=-2)
+
+        >>> Hex(1, 2).rotated_left(1)
+        Hex(q=3, r=-1, s=-2)
+
+        Reflect a Hex over the q-axis
+        >>> Hex(1, 2).reflect('q')
+
     """
 
     __slots__ = ("q", "r")
@@ -68,8 +86,8 @@ class Hex:
             s (float, optional): Optional hex coordinate. Defaults to None.
 
         Raises:
-            TypeError: If ``q, r or s`` are not all of type ``int`` or ``float``
-            ValueError: If ``q, r and s`` does not add upp to ``0``
+            TypeError: If `q, r or s` are not all of type `int` or `float`
+            ValueError: If `q, r and s` does not add upp to `0`
         """
 
         if not isinstance(q, (int, float)) or not isinstance(r, (int, float)):
@@ -177,36 +195,94 @@ class Hex:
 
         self.q, self.r = new_coords
 
+    @overload
+    def __setitem__(
+        self, coords: tuple[str, str, str], values: tuple[float, float, float]
+    ) -> None:
+        ...
+
+    @overload
+    def __setitem__(self, coords: tuple[str, str], values: tuple[float, float]) -> None:
+        ...
+
     def __setitem__(self, coords: tuple[str, ...], values: tuple[float, ...]) -> None:
         """Used to change q, r and s in a dict like manner
+
+        Note:
+            It is intentionally not possible to just change a single coordinate, since that could result in invalid coordinates.
+            If two coords are provided the third will be calculated from the other two.
 
         Args:
             coords (Iterable[str]): The coords to change
             values (Iterable[float]): The values to coords change to
 
         Example:
-            >>> hex = Hex(1, 2, -3)
-            >>> hex['q', 'r'] = (2, 1)
-            >>> hex
+            >>> hx = Hex(1, 2, -3)
+            >>> hx['q', 'r'] = (2, 1)
+            >>> hx
             Hex(q=2, r=1, s=-3)
         """
-        implicit_coord = "s"
+
+        # Tests
+
+        if not isinstance(coords, Iterable) or not isinstance(values, Iterable):
+            raise TypeError("Both coords and values must be iterable.")
+
+        if not all(
+            coord in {"q", "r", "s"} and isinstance(value, (float, int))
+            for coord, value in zip(coords, values)
+        ):
+            raise TypeError(
+                "All coords must be either 'q', 'r' or 's' and all values must be of type 'float' or 'int'"
+            )
+
+        if len(coords) == 1 or len(coords) > 3:
+            raise ValueError(
+                "Must change either two or all three coordinates at the same time, otherwise the hex coordinates will become invalid."
+            )
+
+        if len(coords) != len(values):
+            raise ValueError(
+                "The coords (to change) and the values (to change to) must match in length."
+            )
+
+        if len(coords) != len(set(coords)):
+            raise ValueError("Cannot reference the same coord twice.")
+
+        # Code
 
         if len(coords) == 2:
-            implicit_coord = tuple({"q", "r", "s"} - set(coords))[0]
+            # When length is 2, get the implicit coord by removing the two provided coords from the set of all coords
+            # For instance, if s and r are provided, then q will become implicit and firstly calculated from the other two
 
-        if implicit_coord != "s":
-            setattr(self, implicit_coord, -sum(values))
+            implicit_coord = str(*{"q", "r", "s"} - set(coords))
 
-        # TODO else: raise ValueError()
+            if implicit_coord != "s":
+                setattr(self, implicit_coord, -sum(values))
+        else:
+            implicit_coord = "s"
 
-        for coord, value in zip(coords, values):
-            if coord in ["s", implicit_coord]:
-                continue
+        # create a dict which will access the coords
+        coord_dict = dict(zip(coords, values))
 
-            setattr(self, coord, value)
+        # loop through the coords and values while skipping s and another potential implicit coord
+        for coord, value in coord_dict.items():
+            if coord not in {"s", implicit_coord}:
+                setattr(self, coord, value)
 
+        if "s" in coords:
+            # If all three coords were provided, then the provided s will be checked that it works with q and r by calling the s.setter.
+            self.s = coord_dict["s"]
+
+    @overload
+    def __getitem__(self, coords: str) -> float:
+        ...
+
+    @overload
     def __getitem__(self, coords: tuple[str, ...]) -> tuple[float, ...]:
+        ...
+
+    def __getitem__(self, coords: str | tuple[str, ...]) -> float | tuple[float, ...]:
         """Used to access q, r and s in a dict like manner
 
         Args:
@@ -216,10 +292,9 @@ class Hex:
             tuple[float, ...]: The values of the coords in the same order as the coords provided
 
         Example:
-            >>> hex = Hex(1, 2, -3)
-            >>> hex['q', 'r'] = (2, 1)
-            >>> hex
-            Hex(q=2, r=1, s=-3)
+            >>> hx = Hex(1, 2, -3)
+            >>> hx['r', 'q']
+            (2, 1)
         """
 
         def get_coord(coord: str) -> float:
@@ -228,6 +303,9 @@ class Hex:
                     f"Invalid coordinate: {coord}, must be one of 'q', 'r' or 's'"
                 )
             return getattr(self, coord)
+
+        if isinstance(coords, str):
+            return get_coord(coords)
 
         return tuple(get_coord(coord) for coord in coords)
 
@@ -361,7 +439,7 @@ class Hex:
         """Get the rounded coordinates of this Hex
 
         Note:
-            This can also be done using the function ``round()`` on a Hex.
+            This can also be done using the function `round()` on a Hex.
 
         Args:
             ndigits (int, optional): The number of digits to round to. Defaults to None.
@@ -420,7 +498,7 @@ class Hex:
         """Get the displacement from this Hex to Hexigo
 
         Note:
-            This can also be done using ``len(thisHex)``.
+            This can also be done using `len(thisHex)`.
 
         Returns:
             int: Length, you can think of this as the least amount of Hexes you have to pass through when walking from this Hex to Hexigo.
@@ -435,261 +513,282 @@ class Hex:
         """Get the displacement from this Hex to other Hex
 
         Note:
-            This can also be done using ``len(thisHex - otherHex)``.
+            This can also be done using `len(thisHex - otherHex)`.
 
         Args:
-            other (Hex, optional): The Hex to get distance to if ``other`` is omitted ``Hexigo`` will be used. Defaults to None.
+            other (Hex, optional): The Hex to get distance to if `other` is omitted `Hexigo` will be used. Defaults to None.
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex``.
+            TypeError: If `other` is not of type `Hex`.
 
         Returns:
             int: The distance, which can be thought of as the least amount of Hexes you have to pass through when walking from this Hex to other.
         """
         if not isinstance(other, Hex):
-            raise TypeError(
-                f"Cannot get distance from {self} of type {type(self)} to {other} of type {type(other)}"
-            )
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
 
         return len(self - other)
 
     # negation
 
     def negate(self) -> None:
-        """Inplace the values of self, effectively flipping it around Hexigo
-
-        Returns:
-            Hex: This Hex but negated
-        """
-        self.q = -self.q
-        self.r = -self.r
-
-    def negated(self) -> Hex:
-        """Negate the values of self, effectively flipping it around Hexigo
+        """Inplace negate the values of self, effectively reflecting it over Hexigo.
 
         Note:
+            Non inplace version can be done using `thisHex.negated()` or `-thisHex`.
+        """
+        self.axial_coords = -self.q, -self.r
 
+    def negate_around(self, other: Hex) -> None:
+        """Negate the values of self with other as reference, effectively reflecting it over other Hex.
+
+        Args:
+            other (Hex): The Hex to reflect over
+        """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
+        self -= other
+        self.negate()
+        self += other
+
+    def negated(self) -> Hex:
+        """Negate the values of self, effectively reflecting it over Hexigo.
+
+        Note:
+            This can also be done using `-thisHex`, for inplace see `thishex.negated()`.
 
         Returns:
-            Hex: This Hex but negated
+            Hex: This Hex negated
         """
         return Hex(-self.q, -self.r)
 
     __neg__ = negated
 
+    def negated_around(self, other: Hex) -> Hex:
+        """Negate the values of self with other as reference, effectively reflecting it over other Hex.
+
+        Args:
+            other (Hex): The Hex to reflect over
+
+        Returns:
+            Hex: This Hex negated around other
+        """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
+        return (self - other).negated() + other
+
     # addition and subtraction
 
-    def __add__(self, other: Hex) -> Hex:
+    def add(self, other: Hex) -> Hex:
         """Add this Hex with other Hex
 
+        Note:
+            This can also be done using `thisHex + otherHex`.
+
         Args:
             other (Hex): The Hex to add with
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex``
+            TypeError: If `other` is not of type `Hex`
 
         Returns:
             Hex: This Hex added to other Hex
         """
         if not isinstance(other, Hex):
-            raise TypeError(
-                f"Cannot add {self} of type {type(self)} to {other} of type {type(other)}"
-            )
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
         return Hex(self.q + other.q, self.r + other.r)
 
-    __radd__ = __add__
+    __add__ = add
+    __radd__ = add
 
-    def __iadd__(self, other: Hex):  # -> Self:
+    def iadd(self, other: Hex):  # -> Self:
         """Add this Hex with other Hex inplace
+
+        Note:
+            This can also be done using `thisHex += otherHex`.
 
         Args:
             other (Hex): The Hex to add with
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex``
+            TypeError: If `other` is not of type `Hex`
 
         Returns:
             Hex: This Hex added to other Hex
         """
         if not isinstance(other, Hex):
-            raise TypeError(
-                f"Cannot add {self} of type {type(self)} to {other} of type {type(other)}"
-            )
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
         self.axial_coords = (self.q + other.q, self.r + other.q)
         return self
 
-    def __sub__(self, other: Hex) -> Hex:
+    __iadd__ = iadd
+
+    def sub(self, other: Hex) -> Hex:
         """Subtract this Hex by other Hex
 
         Args:
             other (Hex): The Hex to subtract by
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex``
+            TypeError: If `other` is not of type `Hex`
 
         Returns:
             Hex: This Hex subtracted by other Hex
         """
         if not isinstance(other, Hex):
-            raise TypeError(
-                f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
-            )
-        return self + -other
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
 
-    def __rsub__(self, other: Hex) -> Hex:
-        """Subtract other Hex by this Hex
+        return Hex(self.q - other.q, self.r - other.r)
 
-        Args:
-            other (Hex): The Hex to subtract from
+    __sub__ = sub
+    # don't need __rsub__ since 'other' is only allowed to be a Hex!
 
-        Raises:
-            TypeError: If ``other`` is not of type ``Hex``
-
-        Returns:
-            Hex: The other Hex subtracted by this Hex
-        """
-        if not isinstance(other, Hex):
-            raise TypeError(
-                f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
-            )
-        return other + -self
-
-    def __isub__(self, other: Hex):  # -> Self:
+    def isub(self, other: Hex):  # -> Self:
         """Subtract this Hex by other Hex inplace
 
         Args:
             other (Hex): The Hex to subtract by
 
         Raises:
-            TypeError: If ``other`` is not of type ``Hex``
+            TypeError: If `other` is not of type `Hex`
 
         Returns:
-            Hex: This Hex subtracted by other Hex
+            Self: This Hex
         """
         if not isinstance(other, Hex):
-            raise TypeError(
-                f"Cannot subtract {self} of type {type(self)} from {other} of type {type(other)}"
-            )
-        self.axial_coords = (self.q - other.q, self.r - other.s)
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
+        self.axial_coords = (self.q - other.q, self.r - other.r)
         return self
+
+    __isub__ = isub
 
     # multiplication and division
 
-    def __mul__(self, k: float) -> Hex:
-        """Multiplicate ``this Hex`` by factor ``k``
+    def mul(self, k: float) -> Hex:
+        """Multiplicate `this Hex` by factor `k`
 
         Args:
             k (float): The factor to multiply by
 
         Raises:
-            TypeError: If ``k`` is not of type ``int`` or ``float``
+            TypeError: If `k` is not of type `int` or `float`
 
         Returns:
             Hex: This Hex multiplied by k
         """
         if not isinstance(k, (int, float)):
-            raise TypeError(
-                f"Cannot multiplicate {self} of type {type(self)} with {k} of type {type(k)}"
-            )
+            raise TypeError(f"k must be of type 'float' or 'int', not {type(k)}")
+
         return Hex(self.q * k, self.r * k)
 
-    __rmul__ = __mul__
+    __mul__ = mul
+    __rmul__ = mul
 
-    def __imul__(self, k: float):  # -> Self
-        """Multiplicate ``this Hex`` by factor ``k``
+    def imul(self, k: float):  # -> Self
+        """Multiplicate `this Hex` by factor `k`
 
         Args:
             k (float): The factor to multiply by
 
         Raises:
-            TypeError: If ``k`` is not of type ``int`` or ``float``
+            TypeError: If `k` is not of type `int` or `float`
 
         Returns:
             Hex: This Hex multiplied by k
         """
 
         if not isinstance(k, (int, float)):
-            raise TypeError(
-                f"Cannot multiplicate {self} of type {type(self)} with {k} of type {type(k)}"
-            )
+            raise TypeError(f"k must be of type 'float' or 'int', not {type(k)}")
+
         self.axial_coords = (self.q * k, self.r * k)
         return self
 
-    def __truediv__(self, d: float) -> Hex:
-        """Divide ``this Hex`` by divisor ``d``
+    __imul__ = imul
+
+    def truediv(self, d: float) -> Hex:
+        """Divide `this Hex` by divisor `d`
 
         Args:
-            d.(float): The divisor to divide by
+            d (float): The divisor to divide by
 
         Raises:
-            TypeError: If ``d`` is not of type ``int`` or ``float``
+            TypeError: If `d` is not of type `int` or `float`
 
         Returns:
             Hex: This Hex divided by d
         """
 
         if not isinstance(d, (int, float)):
-            raise TypeError(
-                f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
-            )
+            raise TypeError(f"d must be of type 'float' or 'int', not {type(d)}")
+
         return Hex(self.q / d, self.r / d)
 
-    def __itruediv__(self, d: float):  # -> Self
-        """Divide ``this Hex`` by divisor ``d``
+    __truediv__ = truediv
+
+    def itruediv(self, d: float):  # -> Self
+        """Divide `this Hex` by divisor `d`
 
         Args:
-            d.(float): The divisor to divide by
+            d (float): The divisor to divide by
 
         Raises:
-            TypeError: If ``d`` is not of type ``int`` or ``float``
+            TypeError: If `d` is not of type `int` or `float`
 
         Returns:
             Hex: This Hex divided by d
         """
         if not isinstance(d, (int, float)):
-            raise TypeError(
-                f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
-            )
+            raise TypeError(f"d must be of type 'float' or 'int', not {type(d)}")
+
         self.axial_coords = (self.q / d, self.r / d)
         return self
 
-    def __floordiv__(self, d: float) -> Hex:
-        """Divide ``this Hex`` by divisor ``d`` and round the result
+    __itruediv__ = itruediv
+
+    def floordiv(self, d: float) -> Hex:
+        """Divide `this Hex` by divisor `d` and round the result
 
         Args:
-            d.(float): The divisor to divide by
+            d (float): The divisor to divide by
 
         Raises:
-            TypeError: If ``d`` is not of type ``int`` or ``float``
+            TypeError: If `d` is not of type `int` or `float`
 
         Returns:
             Hex: This Hex divided by d
         """
         if not isinstance(d, (int, float)):
-            raise TypeError(
-                f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
-            )
+            raise TypeError(f"d must be of type 'float' or 'int', not {type(d)}")
+
         return round(Hex(self.q / d, self.r / d))
 
-    def __ifloordiv__(self, d: float):  # -> Self
-        """Divide ``this Hex`` by divisor ``d`` and round the result inplace
+    __floordiv__ = floordiv
+
+    def ifloordiv(self, d: float):  # -> Self
+        """Divide `this Hex` by divisor `d` and round the result inplace
 
         Args:
-            d.(float): The divisor to divide by
+            d (float): The divisor to divide by
 
         Raises:
-            TypeError: If ``d`` is not of type ``int`` or ``float``
+            TypeError: If `d` is not of type `int` or `float`
 
         Returns:
             Hex: This Hex divided by d
         """
         if not isinstance(d, (int, float)):
-            raise TypeError(
-                f"Cannot divide {self} of type {type(self)} with {d} of type {type(d)}"
-            )
+            raise TypeError(f"d must be of type 'float' or 'int', not {type(d)}")
+
         self.axial_coords = (self.q / d, self.r / d)
         self.round()
         return self
+
+    __ifloordiv__ = ifloordiv
 
     # comparisons
 
@@ -697,7 +796,7 @@ class Hex:
         """Check if this Hex is equal to other.
 
         Note:
-            This can also be done using equal operator, ``Hex1 == Hex2`` or ``Hex1 == 2``.
+            This can also be done using equal operator, `Hex1 == Hex2` or `Hex1 == 2`.
 
         Args:
             other (Hex): The Hex to compare with
@@ -708,7 +807,8 @@ class Hex:
         if isinstance(other, Hex):
             return self.axial_coords == other.axial_coords
 
-        return False
+        else:
+            return False
 
     __eq__ = equals
 
@@ -733,7 +833,7 @@ class Hex:
         return len(self) <= len(other)
 
     def __contains__(self, c: float) -> bool:
-        """Check if Hex has c as a cube coord"""
+        """Check if this Hex contains the provided coordinate"""
         return c in self.cube_coords
 
     # left rotation
@@ -741,9 +841,18 @@ class Hex:
     def rotate_left(self, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the left around Hexigo.
 
+        Note:
+            This can also be done using inplace left shift operator, `Hex << steps`.
+
+        Raises:
+            TypeError: If `steps` is not of type `int`
+
         Args:
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
         """
+        if not isinstance(steps, int):
+            raise TypeError(f"steps must be of type 'int', not {type(steps)}")
+
         n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
 
         # Set cube coords of this hex to q, r, s rotated steps % 3 to the left
@@ -755,28 +864,75 @@ class Hex:
     def rotate_left_around(self, other: Hex, steps: int = 1) -> None:
         """Inplace rotate this Hex 60 * steps degrees to the left around other Hex.
 
+        Note:
+            This can also be done using inplace left shift operator, `Hex <<= Hex` or `Hex <<= (Hex, steps)`.
+
+        Raises:
+            TypeError: If `other` is not of type `Hex`
+            TypeError: If `steps` is not of type `int`
+
         Args:
             other (Hex): The other Hex to rotate around.
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
         """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
         self -= other
         self.rotate_left(steps)
         self += other
 
-    # TODO __ilshift__ for rotate_left and rotate_left_around
+    def __ilshift__(self, input: int | Hex | tuple[Hex, int]):  # -> Self:
+        """Convienience method for both rotate_left() and rotate_left_around().
+
+        Args:
+            input (int | Hex | tuple[Hex, int]): If only an `int` is provided that will be used as steps to rotate around `Hexigo`.
+                If only a `Hex` is provided that will be used as a centerpoint and rotated 1 step around.
+                If a tuple with Hex as first argument and int as second is provided that will be used as centerpoint and steps respectively.
+
+        Raises:
+            TypeError: If `input` is not of type `int`, `Hex` or `tuple[Hex, int]`
+        """
+
+        # Just steps was provided, rotate around Hexigo
+        if isinstance(input, int):
+            self.rotate_left(input)
+
+        # Just other Hex was provided, rotate 1 step around other Hex
+        elif isinstance(input, Hex):
+            self.rotate_left_around(input)
+
+        # Both other Hex and steps was provided
+        elif (
+            isinstance(input, tuple)
+            and isinstance(input[0], Hex)
+            and isinstance(input[1], int)
+        ):
+            self.rotate_left_around(*input)
+
+        else:
+            raise TypeError(
+                f"input must be of type 'int', 'Hex' or 'tuple[Hex, int]', not {type(input)}"
+            )
+        return self
 
     def rotated_left(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the left around Hexigo.
 
         Note:
-            This can also be done using left shift operator, ``Hex << steps``.
+            This can also be done using left shift operator, `Hex << steps`.
 
         Args:
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
 
+        Raises:
+            TypeError: If `steps` is not of type `int`
+
         Returns:
             Hex: This Hex rotated left around Hexigo.
         """
+        if not isinstance(steps, int):
+            raise TypeError(f"steps must be of type 'int', not {type(steps)}")
 
         n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
 
@@ -790,27 +946,34 @@ class Hex:
         """Rotate the Hex 60 * steps degrees to the left around other Hex.
 
         Note:
-            This can also be done using left shift operator, ``Hex << Hex`` or ``Hex << (Hex, steps)``.
+            This can also be done using left shift operator, `Hex << Hex` or `Hex << (Hex, steps)`.
 
         Args:
             other (Hex): The other Hex to rotate around.
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
 
+        Raises:
+            TypeError: If `other` is not of type `Hex`
+            TypeError: If `steps` is not of type `int`
+
         Returns:
             Hex: This Hex rotated left around other.
         """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
         return (self - other).rotated_left(steps) + other
 
     def __lshift__(self, input: int | Hex | tuple[Hex, int]) -> Hex:
-        """Convienience method for both rotate_left() and rotate_left_around().
+        """Convienience method for both rotated_left() and rotated_left_around().
 
         Args:
-            input (int | Hex | tuple[Hex, int]): If only an ``int`` is provided that will be used as steps to rotate around ``Hexigo``.
-                If only a ``Hex`` is provided that will be used as a centerpoint and rotated 1 step around.
+            input (int | Hex | tuple[Hex, int]): If only an `int` is provided that will be used as steps to rotate around `Hexigo`.
+                If only a `Hex` is provided that will be used as a centerpoint and rotated 1 step around.
                 If a tuple with Hex as first argument and int as second is provided that will be used as centerpoint and steps respectively.
 
         Raises:
-            TypeError: TODO
+            TypeError: If `input` is not of type `int`, `Hex` or `tuple[Hex, int]`
 
         Returns:
             Hex: This Hex rotated
@@ -849,8 +1012,9 @@ class Hex:
             return self.rotated_left_around(*input)
 
         else:
-            # TODO
-            raise TypeError("")
+            raise TypeError(
+                f"input must be of type 'int', 'Hex' or 'tuple[Hex, int]', not {type(input)}"
+            )
 
     # right rotation
 
@@ -859,7 +1023,13 @@ class Hex:
 
         Args:
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
+
+        Raises:
+            TypeError: If `steps` is not of type `int`.
         """
+        if not isinstance(steps, int):
+            raise TypeError(f"steps must be of type 'int', not {type(steps)}")
+
         n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
 
         # Get a new hex with q, r, s rotated steps % 3 to the right
@@ -874,25 +1044,68 @@ class Hex:
         Args:
             other (Hex): The other Hex to rotate around.
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
+
+        Raises:
+            TypeError: If `other` is not of type `Hex`.
         """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
         self -= other
         self.rotate_right()
         self += other
 
-    # TODO __irshift__ for rotate_left and rotate_left_around
+    def __irshift__(self, input: int | Hex | tuple[Hex, int]):  # -> Self:
+        """Convienience method for both rotate_right() and rotate_right_around().
+
+        Args:
+            input (int | Hex | tuple[Hex, int]): If only an `int` is provided that will be used as steps to rotate around `Hexigo`.
+                If only a `Hex` is provided that will be used as a centerpoint and rotated 1 step around.
+                If a tuple with Hex as first argument and int as second is provided that will be used as centerpoint and steps respectively.
+
+        Raises:
+            TypeError: TypeError: If `input` is not of type `int`, `Hex` or `tuple[Hex, int]`
+        """
+        # Just steps was provided, rotate around Hexigo
+        if isinstance(input, int):
+            self.rotate_right(input)
+
+        # Just other Hex was provided, rotate 1 step around other Hex
+        elif isinstance(input, Hex):
+            self.rotated_right_around(input)
+
+        # Both other Hex and steps was provided
+        elif (
+            isinstance(input, tuple)
+            and isinstance(input[0], Hex)
+            and isinstance(input[1], int)
+        ):
+            self.rotate_right_around(*input)
+
+        else:
+            raise TypeError(
+                f"input must be of type 'int', 'Hex' or 'tuple[Hex, int]', not {type(input)}"
+            )
+        return self
 
     def rotated_right(self, steps: int = 1) -> Hex:
         """Rotate the Hex 60 * steps degrees to the right around Hexigo.
 
         Note:
-            This can also be done using right shift operator, ``Hex >> steps``.
+            This can also be done using right shift operator, `Hex >> steps`.
 
         Args:
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
 
+        Raises:
+            TypeError: If `steps` is not of type `int`.
+
         Returns:
             Hex: This Hex rotated right around Hexigo.
         """
+        if not isinstance(steps, int):
+            raise TypeError(f"steps must be of type 'int', not {type(steps)}")
+
         n = steps % 3 if steps >= 0 else -(abs(steps) % 3)
 
         # Get a new hex with q, r, s rotated steps % 3 to the right
@@ -905,23 +1118,29 @@ class Hex:
         """Rotate the Hex 60 * steps degrees to the right around other Hex.
 
         Note:
-            This can also be done using right shift operator, ``Hex >> Hex`` or ``Hex >> (Hex, steps)``.
+            This can also be done using right shift operator, `Hex >> Hex` or `Hex >> (Hex, steps)`.
 
         Args:
             other (Hex): The other Hex to rotate around.
             steps (int, optional): Amount of 60 degree steps to rotate. Defaults to 1.
 
+        Raises:
+            TypeError: If `other` is not of type `Hex`.
+
         Returns:
             Hex: This Hex rotated right around other.
         """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
         return (self - other).rotated_right(steps) + other
 
     def __rshift__(self, input: int | Hex | tuple[Hex, int]) -> Hex:
         """Convienience method for both rotated_right() and rotated_right_around().
 
         Args:
-            input (int | Hex | tuple[Hex, int]): If only an ``int`` is provided that will be used as steps to rotate around ``Hexigo``.
-                If only a ``Hex`` is provided that will be used as a centerpoint and rotated 1 step around.
+            input (int | Hex | tuple[Hex, int]): If only an `int` is provided that will be used as steps to rotate around `Hexigo`.
+                If only a `Hex` is provided that will be used as a centerpoint and rotated 1 step around.
                 If a tuple with Hex as first argument and int as second is provided that will be used as centerpoint and steps respectively.
 
         Raises:
@@ -964,38 +1183,131 @@ class Hex:
             return self.rotated_right_around(*input)
 
         else:
-            # TODO
-            raise TypeError("")
+            raise TypeError(
+                f"input must be of type 'int', 'Hex' or 'tuple[Hex, int]', not {type(input)}"
+            )
+
+    # reflection
+
+    def reflect(self, axis: Literal["q", "r", "s"]) -> None:
+        """Inplace reflect the Hex over the axis
+
+        Args:
+            axis (Literal['q', 'r', 's']): The axis to reflect over, either 'q', 'r' or 's'
+
+        Raises:
+            ValueError: _description_
+        """
+        if axis not in {"q", "r", "s"}:
+            raise ValueError("Axis must be either 'q', 'r' or 's'")
+
+        elif axis == "q":
+            self.r = self.s
+
+        elif axis == "r":
+            self.q = self.s
+
+        elif axis == "s":
+            self.axial_coords = self.r, self.q
+
+        # this works but is 10 times slower!
+        # coords = tuple({"q", "r", "s"} - {axis})
+        # self[coords] = self[coords[::-1]]
+
+    def reflect_around(self, other: Hex, axis: Literal["q", "r", "s"]) -> None:
+        """Inplace reflect the Hex over other Hex
+
+        Args:
+            other (Hex): The other Hex to reflect over
+            axis (Literal['q', 'r', 's']): The axis to reflect over, either 'q', 'r' or 's'
+        """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
+        self -= other
+        self.reflect(axis)
+        self += other
+
+    def reflected(self, axis: Literal["q", "r", "s"]) -> Hex:
+        """Reflect the Hex over the axis
+
+        Args:
+            axis (Literal['q', 'r', 's']): The axis to reflect over, either 'q', 'r' or 's'
+
+        Returns:
+            Hex: This Hex reflected over other Hex
+        """
+        if axis not in {"q", "r", "s"}:
+            raise ValueError("Axis must be either 'q', 'r' or 's'")
+
+        elif axis == "q":
+            return Hex(self.q, self.s, self.r)
+
+        elif axis == "r":
+            return Hex(self.s, self.r, self.q)
+
+        elif axis == "s":
+            return Hex(self.r, self.q, self.s)
+
+        # The following works but is less clear and 4 times slower
+        # coords = tuple({"q", "r", "s"} - {axis})
+        # reflected_hex = Hex(0, 0, 0)
+        # reflected_hex[coords] = self[coords[::-1]]
+        # return reflected_hex
+
+    def reflected_around(self, other: Hex, axis: Literal["q", "r", "s"]) -> Hex:
+        """Reflect the Hex over other Hex
+
+        Args:
+            other (Hex): The other Hex to reflect over
+
+        Returns:
+            Hex: This Hex reflected over other Hex
+        """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
+        return (self - other).reflected(axis) + other
 
     # lerp and linedraw
 
     def lerp(self, other: Hex, t: float) -> Hex:
-        """Lerp from this Hex to other Hex at fraction ``t``.
+        """Lerp from this Hex to other Hex at fraction `t`.
 
         Args:
             other (Hex): The Hex to lerp to
             t (float): The time fraction of lerp
 
         Raises:
-            ValueError: If ``t`` is outside of range ``0 <= t <= 1``
+            TypeError: If `other` is not of type `Hex`
+            TypeError: If `t` is not of type `float`
+            ValueError: If `t` is outside of range `0 <= t <= 1`
 
         Returns:
-            Hex: The ``Hex`` coordinate at ``t``
+            Hex: The `Hex` coordinate at `t`
         """
-        # TODO if not isinstance(other, Hex): raise TypeError("")
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
 
-        # TODO if not isinstance(t, floatS): raise TypeError("")
+        if not isinstance(t, float):
+            raise TypeError(f"t must be of type 'float', not {type(t)}")
 
         if not 0 <= t <= 1:
-            raise ValueError("Fraction t of lerp was out of range 0 <= t <= 1")
+            raise ValueError(f"t must be between 0 and 1, not {t}")
 
         return self * (1.0 - t) + other * t
 
     def nudge(self, factor: float = 1) -> None:
         """Inplace nudge Hex in a consistent direction.
 
-        This is used have get better consistency when for instance landing between two grid cells in lerps.
+        This is used get better consistency when, for instance, landing exactly between two cells during lerps.
+
+        Raises:
+            TypeError: If `factor` is not of type `float` or `int`
         """
+        if not isinstance(factor, (float, int)):
+            raise TypeError(f"t must be of type 'float' or 'int', not {type(factor)}")
+
         self.q -= 1e-06 * factor
         self.r += 1e-06 * factor
 
@@ -1004,9 +1316,15 @@ class Hex:
 
         This is used have get better consistency when for instance landing between two grid cells in lerps.
 
+        Raises:
+            TypeError: If `factor` is not of type `float` or `int`
+
         Returns:
             Hex: This Hex nudged
         """
+        if not isinstance(factor, (float, int)):
+            raise TypeError(f"t must be of type 'float' or 'int', not {type(factor)}")
+
         return Hex(self.q + 1e-06 * factor, self.r + 1e-06 * factor)
 
     def linedraw(self, other: Hex) -> Iterator[Hex]:
@@ -1018,6 +1336,8 @@ class Hex:
         Yields:
             Iterator[Hex]: The Hexes from this Hex to other Hex, in order
         """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
 
         # Number of hexes that will be reqired
         steps = self.distance(other)
@@ -1043,7 +1363,7 @@ class Hex:
         """Convert this Hex to point based on Layout
 
         Note:
-            ``.to_point()`` returns the same as ``.to_pixel()`` but ``without rounding`` the result.
+            `.to_point()` returns the same as `.to_pixel()` but `without rounding` the result.
 
         Raises:
             ValueError: If a Layout is not yet defined.
@@ -1052,7 +1372,7 @@ class Hex:
             Point: The exact center point of this Hex.
         """
 
-        if self.hexlayout is None:
+        if not hasattr(self, "hexlayout"):
             raise ValueError(
                 "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
             )
@@ -1073,10 +1393,10 @@ class Hex:
         # return transformed * self.hexlayout.size + self.hexlayout.origin
 
     def to_pixel(self) -> Point:
-        """Convert this Hex to point based on Layout
+        """Convert this Hex to a pixel based on Layout
 
         Note:
-            ``.to_pixel()`` returns the same as ``.to_point()`` but ``rounds`` the result.
+            `.to_pixel()` returns the same as `.to_point()` but `rounds` the result.
 
         Raises:
             ValueError: If a Layout is not yet defined.
@@ -1090,7 +1410,7 @@ class Hex:
         """Return corner offset from center of this Hex at index idx
 
         Args:
-            idx (int): The corner index
+            idx (int): The index of the corner to get
 
         Raises:
             ValueError: If a Layout is not yet defined.
@@ -1099,7 +1419,7 @@ class Hex:
             Point: A Point which is the offset from the centerpoint to the corner at idx
         """
 
-        if self.hexlayout is None:
+        if not hasattr(self, "hexlayout"):
             raise ValueError(
                 "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
             )
@@ -1116,7 +1436,7 @@ class Hex:
         """Yeild all exact points forming self as a polygon.
 
         Note:
-            ``.polygon_points()`` returns the same as ``.polygon_pixels()`` but ``without rounding`` the result.
+            `.polygon_points()` returns the same as `.polygon_pixels()` but `without rounding` the result.
 
         Args:
             factor (float, optional): Shrink size of Hex with factor. Defaults to 1.
@@ -1139,10 +1459,10 @@ class Hex:
         """Yeild all pixels forming self as a polygon
 
         Note:
-            ``.polygon_pixels()`` returns the same as ``.polygon_points()`` but ``rounds`` the result.
+            `.polygon_pixels()` returns the same as `.polygon_points()` but `rounds` the result.
 
         Args:
-            factor (float, optional): Shrink size of Hex with factor. Defaults to 1.
+            factor (float, optional): Shrink size of Hex by factor. Defaults to 1.
 
         Raises:
             ValueError: If a Layout is not yet defined.
@@ -1158,7 +1478,7 @@ class Hex:
         """Return the rounded Hex closest to the provided pixel based on the Hex layout.
 
         Note:
-            ``.from_pixel()`` returns the same as ``.from_point()`` but ``rounds`` the result.
+            `.from_pixel()` returns the same as `.from_point()` but `rounds` the result.
 
         Args:
             pixel (Point | tuple[float, float]): The pixel to calculate from.
@@ -1176,7 +1496,7 @@ class Hex:
         """Return the Hex closest to the provided point based on the Hex layout.
 
         Note:
-            ``.from_point()`` returns the same as ``.from_pixel()`` without ``rounding`` the result.
+            `.from_point()` returns the same as `.from_pixel()` without `rounding` the result.
 
         Args:
             pixel (Point | tuple[float, float]): The pixel to calculate from.
