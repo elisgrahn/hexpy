@@ -22,7 +22,7 @@ Examples:
 
     Create a HexMap with the six neighbors to Hexigo.
 
-    >>> HexMap.hexagon(radius=1, value=0, hexorigin=Hexigo, hollow=True)
+    >>> HexMap.hexagon(radius=1, value=0, origin_offset=Hexigo, hollow=True)
     {Hex(q=-1, r=0, s=1): 0,
      Hex(q=-1, r=1, s=0): 0,
      Hex(q=0, r=-1, s=1): 0,
@@ -56,9 +56,19 @@ import pickle
 import warnings
 from collections.abc import Iterable
 from math import floor
-from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, Optional, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generator,
+    Iterator,
+    Literal,
+    Optional,
+    TypeAlias,
+    overload,
+)
 
-from argon2 import Type
+from numpy import empty
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
@@ -70,65 +80,67 @@ from _collections_abc import dict_items, dict_keys, dict_values
 from .hexclass import Hex, Hexigo
 from .navigate import HexClock, HexCompass
 
+hexcoord: TypeAlias = Literal["q", "r", "s"]
+
 # import dill # TODO maybe replace pickle with dill
 
 
-def new(value: Any = None, hexorigin: Hex = Hexigo) -> HexMap:
+def new(value: Any = None, origin_offset: Hex = Hexigo) -> HexMap:
     """Creates a new empty HexMap
 
     Args:
         value (Any, optional): Value that will be assigned to new Hexes added to HexMap. Defaults to None.
-        hexorigin (Hex, optional): Origin of the HexMap, all new Hexes will be offset by hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): Origin of the HexMap, all new Hexes will be offset by origin_offset. Defaults to Hexigo.
 
     Returns:
         HexMap: An empty HexMap representing a Hexagonal grid
     """
-    return HexMap(default_value=value, origin_offset=hexorigin)
+    return HexMap(default_value=value, origin_offset=origin_offset)
 
 
 def fromdict(
-    hexes: dict[Hex, Any], value: Any = None, hexorigin: Hex = Hexigo
+    hexdict: dict[Hex, Any], value: Any = None, origin_offset: Hex = Hexigo
 ) -> HexMap:
     """Create a HexMap from the given dict with Hex as keys
 
     Args:
-        hexes (dict[Hex, Any]): A dict with `Hex` as keys
+        hexdict (dict[Hex, Any]): A dict with `Hex` as keys
         value (Any, optional): Value that will be assigned to new Hexes added to HexMap. Defaults to None.
-        hexorigin (Hex, optional): Origin of the HexMap, all new Hexes will be offset by hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): Origin of the HexMap, all new Hexes will be offset by origin_offset. Defaults to Hexigo.
 
     Returns:
         HexMap: _description_
     """
-    return HexMap(hexes, default_value=value, origin_offset=hexorigin)
+    return HexMap(hexdict, default_value=value, origin_offset=origin_offset)
 
 
 def fromkeys(
-    hexes: Hex | Iterable[Hex], value: Any = None, hexorigin: Hex = Hexigo
+    hexiter: Hex | Iterable[Hex], value: Any = None, origin_offset: Hex = Hexigo
 ) -> HexMap:
     """Create a new HexMap from a single Hex or the given iterable of Hex
 
     Args:
-        hexes (dict[Hex, Any]): An iterable of `Hex`
+        hexiter (Hex | Iterable[Hex]): An iterable of `Hex`
         value (Any, optional): Value that will be assigned to new Hexes added to HexMap. Defaults to None.
-        hexorigin (Hex, optional): Origin of the HexMap, all new Hexes will be offset by hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): Origin of the HexMap, all new Hexes will be offset by origin_offset. Defaults to Hexigo.
     Raises:
         TypeError: _description_
 
     Returns:
         HexMap: _description_
     """
-    if isinstance(hexes, Hex):
-        hexes = dict.fromkeys([hexes], value)
+    if isinstance(hexiter, Hex):
+        hexdict = dict.fromkeys((hexiter,), value)
 
-    elif isinstance(hexes, Iterable):
-        hexes = dict.fromkeys(hexes, value)
+    elif isinstance(hexiter, Iterable):
+        hexdict = dict.fromkeys(hexiter, value)
 
     else:
         raise TypeError(
-            f"hexes must be of type 'Hex' or 'Iterable[Hex]', not {type(hexes)}"
+            f"hexiter must be of type 'Hex' or 'Iterable[Hex]', not {type(hexiter)}"
         )
 
-    return HexMap(hexes, default_value=value, origin_offset=hexorigin)
+    return HexMap(hexdict, default_value=value, origin_offset=origin_offset)
 
 
 def open(filepath: str) -> HexMap:
@@ -157,47 +169,59 @@ class HexMap(dict):
 
     def __init__(
         self,
-        hexes: Optional[dict[Hex, Any]] = None,
+        hexdict: Optional[dict[Hex, Any]] = None,
         default_value: Any = None,
         origin_offset: Hex = Hexigo,
     ) -> None:
         """Create a hexagonal grid map of hexes.
 
         Args:
-            hexes (dict[Hex, Any], optional): If provided it will become the inital HexMap. Defaults to None.
+            hexdict (dict[Hex, Any], optional): If provided it will become the inital HexMap. Defaults to None.
             default_value (Any, optional): Default value that will be assigned to new Hexes added to HexMap. Defaults to None.
-            origin_offset (Hex, optional): Origin of the HexMap, all new Hexes will be offset by hexorigin. Defaults to Hexigo.
+            origin_offset (Hex, optional): Origin of the HexMap, all new Hexes will be offset by origin_offset. Defaults to Hexigo.
         """
 
-        self.default = default_value
-        self.hexorigin = origin_offset
+        self.default_value = default_value
+        self.origin_offset = origin_offset
 
-        if hexes is None:
+        if hexdict is None:
             super().__init__()
 
-        elif not isinstance(hexes, dict):
+        elif not isinstance(hexdict, dict):
             raise TypeError(
                 "HexMaps can only be created initiated from dicts, if you need to create a HexMap from another Hex iterable use 'hexmap.fromkeys()'"
             )
 
-        elif not all(isinstance(hx, Hex) for hx in hexes):
+        elif not all(isinstance(hx, Hex) for hx in hexdict):
             raise TypeError("All keys in a HexMap must be of type Hex")
 
         else:
-            super().__init__(hexes)
+            super().__init__(hexdict)
+
+    @property
+    def empty(self) -> bool:
+        """Check if HexMap is empty.
+
+        Note:
+            This is the same as taking `len(HexMap) == 0` or `bool(self)`
+
+        Returns:
+            bool: True if HexMap is empty, False otherwise
+        """
+        return bool(self)
 
     # creation
 
-    def _new(self, hexes: dict[Hex, Any]) -> HexMap:
-        """Create a new HexMap, passing on the default value and hexorigin offset
+    def _new(self, hexdict: dict[Hex, Any]) -> HexMap:
+        """Internally create a new HexMap, passing on the default value and origin_offset offset
 
         Args:
-            hexes (dict[Hex, Any]): Hexes for the new HexMap
+            hexdict (dict[Hex, Any]): Dict with Hex as keys to use for the new HexMap
 
         Returns:
             HexMap: The new HexMap
         """
-        return HexMap(hexes, self.default, self.hexorigin)
+        return HexMap(hexdict, self.default_value, self.origin_offset)
 
     def copy(self) -> HexMap:
         """Create a new identical HexMap
@@ -205,7 +229,7 @@ class HexMap(dict):
         Returns:
             HexMap: A copy of this HexMap
         """
-        return HexMap(dict(self), self.default, self.hexorigin)
+        return HexMap(dict(self), self.default_value, self.origin_offset)
 
     # representations
 
@@ -239,7 +263,7 @@ class HexMap(dict):
         Returns:
             dict_keys[Hex, Any]: A set-like object providing a view on HexMap Hexes
         """
-        return self.keys()
+        return super().keys()
 
     def items(self) -> dict_items[Hex, Any]:
         """Wrapper method of .items() to provide type annotation.
@@ -255,7 +279,7 @@ class HexMap(dict):
         Returns:
             dict_items[Hex, Any]: A set-like object providing a view on HexMap items (pairs of Hex and value)
         """
-        return self.items()
+        return super().items()
 
     def values(self) -> dict_values[Hex, Any]:
         """Wrapper method of .values() to provide type annotation.
@@ -296,28 +320,19 @@ class HexMap(dict):
         ...
 
     @overload
-    def __getitem__(
-        self, __key: tuple[Hex, ...] | HexClock | HexCompass | HexMap
-    ) -> tuple[Any, ...]:
+    def __getitem__(self, __key: Iterable[Hex]) -> tuple[Any, ...]:
         ...
 
     @overload
     def __getitem__(self, __key: Generator[bool, None, None]) -> HexMap:
         ...
 
-    def __getitem__(
-        self,
-        __key: Hex
-        | tuple[Hex, ...]
-        | HexClock
-        | HexCompass
-        | HexMap
-        | Generator[bool, None, None],
-    ):
+    def __getitem__(self, __key: Hex | Iterable[Hex] | Generator[bool, None, None]):
         """Get value(s) at self[key]
 
         Args:
-            __key (Hex | HexMap): If a `Hex` is provided only that Hex assigned value will be returned and if a `HexMap` is provided all values from this HexMap that overlap with other will be returned
+            __key (Hex | Iterable[Hex]): If a Hex is provided only it's value will be returned and
+        if an Iterable of Hex is provided all values from the Hex in the Iterable will be returned as a tuple
 
         Raises:
             TypeError: If `__key` is not of type `Hex` or `HexMap`
@@ -329,16 +344,13 @@ class HexMap(dict):
         if isinstance(__key, Hex):
             return super().__getitem__(__key)
 
-        elif isinstance(__key, (tuple, HexClock, HexCompass)):
+        elif isinstance(__key, Generator):
+            return self._new({hx: v for b, (hx, v) in zip(__key, self.items()) if b})
+
+        elif isinstance(__key, Iterable):
             # This is to handle HexClock or HexCompass in hexpy.navigate
             # NOTE that both if you iterate on a HexClock or HexCompass you will iterate through the Hexagons and not the keys
             return tuple(super().__getitem__(hx) for hx in __key if isinstance(hx, Hex))
-
-        elif isinstance(__key, HexMap):
-            return (self & __key).values()
-
-        elif isinstance(__key, Generator):
-            return self._new({hx: v for b, (hx, v) in zip(__key, self.items()) if b})
 
         else:
             raise TypeError(
@@ -346,14 +358,7 @@ class HexMap(dict):
             )
 
     def __setitem__(
-        self,
-        __key: Hex
-        | tuple[Hex, ...]
-        | HexClock
-        | HexCompass
-        | HexMap
-        | Generator[bool, None, None],
-        __value: Any,
+        self, __key: Hex | Iterable[Hex] | Generator[bool, None, None], __value: Any
     ) -> None:
         """Set `self[key]` to `value`.
 
@@ -362,24 +367,30 @@ class HexMap(dict):
             __value (Any): The value to set to
 
         Raises:
-            TypeError: If `__key` is not of type `Hex` or `HexMap`
+            TypeError: If `__key` is not of type `Hex`, `Iterable` or `Generator`
+            TypeError: If `__key` is of type `Iterable` but contains items that are not of type `Hex`
         """
 
         if isinstance(__key, Hex):
-            # When running pickle.load self.hexorigin hasn't been defined yet, therefore the inline if expression
-            super().__setitem__(
-                __key + self.hexorigin if hasattr(self, "hexorigin") else Hexigo,
-                __value,
-            )
+            # When running pickle.load self.origin_offset hasn't been defined yet, therefore the inline if expression
+            offset = self.origin_offset if hasattr(self, "origin_offset") else Hexigo
 
-        elif isinstance(__key, (HexMap, tuple, HexClock, HexCompass)):
-            for hx in __key:
-                self[hx] = __value
+            super().__setitem__(__key + offset, __value)
 
         elif isinstance(__key, Generator):
             for b, hx in zip(__key, self.keys()):
                 if b:
                     self[hx] = __value
+
+        elif isinstance(__key, Iterable):
+            for hx in __key:
+                # Check that the items in iterable are of type Hex
+                if not isinstance(hx, Hex):
+                    raise TypeError(
+                        f"Items of iterable provided to HexMap.__setitem__ should be of type Hex, not {type(hx)}"
+                    )
+
+                self[hx] = __value
 
         else:
             raise TypeError(
@@ -388,48 +399,43 @@ class HexMap(dict):
 
     # update
 
-    import pandas as pd
-
-    def pop(self, hexes: Hex | Iterable[Hex], default: Any = None) -> Any:
+    def pop(self, hexiter: Hex | Iterable[Hex], default: Any = None) -> Any:
         """Pop a Hex from the HexMap and return its value
 
         Args:
-            hx (Hex): The Hex to pop
+            hexiter (Hex | Iterable[Hex]): The Hex or Iterable of Hex to pop
             default (Any): The value to return if the Hex is not in the HexMap
 
         Returns:
             Any: The value of the popped Hex
         """
-        if isinstance(hexes, Hex):
-            return super().pop(hexes, None)
+        if isinstance(hexiter, Hex):
+            return super().pop(hexiter, None)
 
-        elif isinstance(hexes, Iterable):
-            return tuple(self.pop(hx) for hx in hexes)
+        elif isinstance(hexiter, Iterable):
+            return tuple(self.pop(hx) for hx in hexiter)
 
         else:
             raise TypeError(
-                f"hexes must be of type 'Hex' or 'Iterable[Hex]', not {type(hexes)}"
+                f"hexiter must be of type 'Hex' or 'Iterable[Hex]', not {type(hexiter)}"
             )
 
-    def insert(
-        self, hexes: Hex | tuple[Hex, ...] | HexMap, value: Optional[Any] = None
-    ) -> None:
+    def insert(self, hexiter: Hex | Iterable[Hex], value: Optional[Any] = None) -> None:
         """Insert a Hex or whole HexMap in this HexMap with an optional value otherwise set to default value
 
         Args:
-            hex_or_hexmap (Hex | HexMap): Set a specific Hex in this HexMap or all Hexes from another HexMap
-
-            value (Any, optional): The value to assign to new Hexes. Defaults to self.default.
+            hexiter (Hex | Iterable[Hex]): Insert a specific Hex or an iterable of Hex
+            value (Any, optional): The value to assign to new Hexes. Defaults to self.default_value.
 
         Raises:
             TypeError: If `hex_or_hexmap` is not of type `Hex` or `HexMap`
         """
-        if isinstance(hexes, (Hex, tuple, HexMap)):
-            self[hexes] = value or self.default
+        if isinstance(hexiter, (Hex, Iterable)):
+            self[hexiter] = value or self.default_value
 
         else:
             raise TypeError(
-                f"Argument hexes was provided {hexes} of type {type(hexes)} which is neither a Hex, a tuple of Hex nor a HexMap"
+                f"Argument hexiter was provided {hexiter} of type {type(hexiter)} which is neither a Hex nor an iterable of Hex"
             )
 
     # changing
@@ -438,9 +444,9 @@ class HexMap(dict):
         """Update all Hexes (keys) to a certain value
 
         Args:
-            value (Any, optional): The value to change Hexes to. Defaults to self.default.
+            value (Any, optional): The value to change Hexes to. Defaults to self.default_value.
         """
-        self.update(self.fromkeys(self.keys(), value or self.default))
+        self.update(self.fromkeys(self.keys(), value or self.default_value))
 
     def apply(self, func: Callable[[Any], Any], *args, **kwargs) -> HexMap:
         """Apply a function to all values in this HexMap
@@ -508,7 +514,23 @@ class HexMap(dict):
             {func(hx, *args, **kwargs): value for hx, value in self.items()}
         )
 
+    def clear(self) -> None:
+        """Clear the HexMap"""
+        super().clear()
+
+    def cleared(self) -> HexMap:
+        """Get a cleared copy of the HexMap"""
+        return self._new({})
+
     # comparison
+
+    def __bool__(self) -> bool:
+        """True if the HexMap is not empty
+
+        Returns:
+            bool: True if the HexMap is not empty
+        """
+        return bool(self.values())
 
     def __eq__(self, other: HexMap | object) -> Generator[bool, None, None]:
         """Boolean mask
@@ -517,7 +539,7 @@ class HexMap(dict):
             other (HexMap | object): _description_
 
         Returns:
-            Iterable[bool]: _description_
+            Generator[bool, None, None]: _description_
         """
 
         return (v == other for v in self.values())
@@ -529,7 +551,7 @@ class HexMap(dict):
             other (HexMap | object): _description_
 
         Returns:
-            Iterable[bool]: _description_
+            Generator[bool, None, None]: _description_
         """
         return (v < other for v in self.values())
 
@@ -540,7 +562,7 @@ class HexMap(dict):
             other (HexMap | object): _description_
 
         Returns:
-            Iterable[bool]: _description_
+            Generator[bool, None, None]: _description_
         """
         return (v <= other for v in self.values())
 
@@ -551,7 +573,7 @@ class HexMap(dict):
             other (HexMap | object): _description_
 
         Returns:
-            Iterable[bool]: _description_
+            Generator[bool, None, None]: _description_
         """
         return (v > other for v in self.values())
 
@@ -562,7 +584,7 @@ class HexMap(dict):
             other (HexMap | object): _description_
 
         Returns:
-            Iterable[bool]: _description_
+            Generator[bool, None, None]: _description_
         """
         return (v >= other for v in self.values())
 
@@ -641,7 +663,7 @@ class HexMap(dict):
             Creating two hexagonal hexmaps
 
             >>> hxmp1 = hexmap.hexagon(radius=1, value=1)
-            >>> hxmp2 = hexmap.hexagon(radius=1, value=2, hexorigin=Hex(1, 0))
+            >>> hxmp2 = hexmap.hexagon(radius=1, value=2, origin_offset=Hex(1, 0))
 
             Using function to add values of intersecting Hexes
 
@@ -800,7 +822,7 @@ class HexMap(dict):
             Creating two hexagonal hexmaps
 
             >>> hxmp1 = hexmap.hexagon(radius=1, value=1)
-            >>> hxmp2 = hexmap.hexagon(radius=1, value=2, hexorigin=Hex(1, 0))
+            >>> hxmp2 = hexmap.hexagon(radius=1, value=2, origin_offset=Hex(1, 0))
 
             Using function to add values of intersecting Hexes
 
@@ -1044,7 +1066,7 @@ class HexMap(dict):
         self,
         colormap: Optional[dict[Any, Any]] = None,
         draw_axes: bool = False,
-        draw_text: bool = False,
+        draw_coords: bool = False,
         size_factor: float = 1,
         hex_alpha: float = 0.8,
         facecolor: Optional[Any] = None,
@@ -1066,7 +1088,7 @@ class HexMap(dict):
             self,
             colormap,
             draw_axes,
-            draw_text,
+            draw_coords,
             size_factor,
             hex_alpha,
             facecolor,
@@ -1080,7 +1102,7 @@ def plot(
     colormap: Optional[dict[Any, Any]] = None,
     # textmap: Optional[dict[Any, str]] = None,
     draw_axes: bool = False,
-    draw_text: bool = False,
+    draw_coords: bool = False,
     size_factor: float = 1,
     hex_alpha: float = 0.8,
     facecolor: Optional[Any] = None,
@@ -1143,7 +1165,7 @@ def plot(
     if colormap is None:
         # This draws the hexagons slightly faster since they all get the same appearence
         hex_list = [
-            Polygon(tuple(hx.polygon_points(size_factor)))  # type: ignore
+            Polygon(hx.polygon_points(size_factor))  # type: ignore
             for hx in hxmp.hexes()
         ]
         hexagons = PatchCollection(hex_list, facecolor=WHITE, edgecolor=GRAY)
@@ -1152,7 +1174,7 @@ def plot(
         # This draws the hexagons slightly slower but gives individiual colors to the ones with values specified in the colormap
         hex_list = [
             Polygon(
-                tuple(hx.polygon_points(size_factor)),  # type: ignore
+                hx.polygon_points(size_factor),  # type: ignore
                 facecolor=colormap[value] if value in colormap else WHITE,
                 edgecolor=GRAY,
             )
@@ -1160,10 +1182,13 @@ def plot(
         ]
         hexagons = PatchCollection(hex_list, match_original=True)
 
+    # hexagons.set_alpha(hex_alpha)
+    # hexagons.set_facecolor("none")
+
     ax.add_collection(hexagons)  # type: ignore
 
-    origin = hxmp.hexorigin.to_point()
-    diagonal = hxmp.hexorigin + Hex(2, -1)
+    origin = hxmp.origin_offset.to_point()
+    diagonal = hxmp.origin_offset + Hex(2, -1)
 
     if draw_axes:
         # Draw q, r and s axes
@@ -1172,8 +1197,8 @@ def plot(
             ax.axline(origin, diagonal.to_point(), color=col, label=lbl)
             # , zorder=0) Used to set axline behind patches
 
-            # Rotate the diagonal inplace to the right around hexorigin two steps
-            diagonal >>= (hxmp.hexorigin, 2)
+            # Rotate the diagonal inplace to the right around origin_offset two steps
+            diagonal >>= (hxmp.origin_offset, 2)
 
     else:
         # If this is left out, then no patches will be shown!
@@ -1182,7 +1207,7 @@ def plot(
     # This is used to display q, r and s values in the top right of the window
     def coord_display(x, y):
         x, y = round(x, 1), round(y, 1)
-        hexagon = Hex.from_point((x, y)).rounded(1)
+        hexagon = Hex.from_pixel((x, y), False).rounded(1)
 
         q, r, s = (round(c, 1) for c in hexagon.cube_coords)
 
@@ -1193,7 +1218,7 @@ def plot(
 
     # TODO make text size relative to ax window size
 
-    if draw_text:
+    if draw_coords:
         # phis = np.arange((1 / 2), -(5 / 6), -(2 / 3))
         phis = np.array(((1 / 2), -(1 / 6), -(5 / 6)))
 
@@ -1213,7 +1238,7 @@ def plot(
                 label_x = center.x + 0.4 * hx_size.x * np.cos(phi)
                 label_y = center.y + 0.4 * hx_size.y * -np.sin(phi)
 
-                plt.text(
+                ax.text(
                     label_x,
                     label_y,
                     f"{coord:^3}",
@@ -1221,7 +1246,7 @@ def plot(
                     ha="center",
                     color=color,
                     weight="bold",
-                    size=hx_size.x,
+                    size=20,
                 )
 
     if show_directly:
@@ -1250,15 +1275,15 @@ def show(*args, **kwargs):
 def hexagon(
     radius: int,
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a Hexagon ⬢
 
     Args:
-        radius (int): The number of hexes from the hexorigin
+        radius (int): The number of hexes from the origin_offset
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
@@ -1267,7 +1292,7 @@ def hexagon(
 
     # TODO ADD TYPE CHECKS
 
-    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+    hxmp = HexMap(default_value=value, origin_offset=origin_offset)
 
     for q in range(-radius, radius + 1):
         r1 = max(-radius, -q - radius)
@@ -1275,8 +1300,9 @@ def hexagon(
 
         if not hollow or q == -radius or q == radius:
             for r in range(r1, r2 + 1):
-                hxmp.insert(Hex(q, r))
+                # print(f"{q=}, {r=}")
 
+                hxmp.insert(Hex(q, r))
         else:
             hxmp.insert(Hex(q, r1))
             hxmp.insert(Hex(q, r2))
@@ -1287,7 +1313,7 @@ def hexagon(
 def parallelogram(
     axes: dict[str, int | tuple[int, int]] = {"q": 2, "r": 1},
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:  # sourcery skip: default-mutable-arg
     """Create a HexMap in the shape of a Parallelogram ▰
@@ -1295,7 +1321,7 @@ def parallelogram(
     Args:
         axes (_type_, optional): _description_. Defaults to {"q": 2, "r": 2}.
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
@@ -1319,7 +1345,7 @@ def parallelogram(
 
     # Creating a Hex at Hexigo which will effectively be "moved" around the shape
     hx = Hex(0, 0)
-    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+    hxmp = HexMap(default_value=value, origin_offset=origin_offset)
 
     ax1, ax2 = axes
     v1, v2 = axes.values()
@@ -1346,29 +1372,32 @@ def rhombus(
     size: int | tuple[int, int] = 1,
     axes: str | tuple[str, str] = "qs",
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a rhombus (aka diamond) ⬧
+
+    Note:
+        This is a special case of parallelogram, where both axes are the same size.
 
     Args:
         size (int, optional): _description_. Defaults to 1.
         axes (str | tuple[str, str], optional): _description_. Defaults to ("q", "s").
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
         HexMap: The rhombus HexMap
     """
-    # TODO When available remove: value, hexorigin, hollow in favor for type-annotated kwargs
-    return parallelogram({axes[0]: size, axes[1]: size}, value, hexorigin, hollow)
+    # TODO When available remove: value, origin_offset, hollow in favor for type-annotated kwargs
+    return parallelogram({axes[0]: size, axes[1]: size}, value, origin_offset, hollow)
 
 
 def rectangle(
     axes: dict[str, int | tuple[int, int]] = {"q": (-3, 3), "r": (-2, 2)},
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:  # sourcery skip: default-mutable-arg
     """Create a HexMap in the shape of a Rectangle ▬
@@ -1376,7 +1405,7 @@ def rectangle(
     Args:
         axes (_type_, optional): _description_. Defaults to {"q": (-3, 3), "r": (-2, 2)}.
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
@@ -1399,7 +1428,7 @@ def rectangle(
     top, bottom = (-v1, v1) if isinstance(v1, int) else v1
 
     hx = Hex(0, 0)
-    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+    hxmp = HexMap(default_value=value, origin_offset=origin_offset)
 
     range1 = range(top, bottom + 1)
 
@@ -1425,31 +1454,34 @@ def square(
     size: int | tuple[int, int] = 1,
     axes: str | tuple[str, str] = "qr",
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a Square ■
+
+    Note:
+        This is a special case of rectangle, where both axes are the same size.
 
     Args:
         size (int | tuple[int, int], optional): _description_. Defaults to 1.
         axes (str | tuple[str, str], optional): _description_. Defaults to "qr".
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
         HexMap: The square HexMap
     """
 
-    # TODO When available remove: value, hexorigin, hollow in favor for type-annotated kwargs
-    return rectangle({axes[0]: size, axes[1]: size}, value, hexorigin, hollow)
+    # TODO When available remove: value, origin_offset, hollow in favor for type-annotated kwargs
+    return rectangle({axes[0]: size, axes[1]: size}, value, origin_offset, hollow)
 
 
 def triangle(
     size: int | tuple = 1,
     axes: str | tuple[str, str] = "qr",
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a Triangle ▲
@@ -1458,7 +1490,7 @@ def triangle(
         size (int | tuple, optional): _description_. Defaults to 1.
         axes (str | tuple[str, str], optional): _description_. Defaults to "qr".
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
@@ -1471,7 +1503,7 @@ def triangle(
     # }
 
     hx = Hex(0, 0)
-    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+    hxmp = HexMap(default_value=value, origin_offset=origin_offset)
 
     ax1, ax2 = axes
 
@@ -1502,16 +1534,21 @@ def triangle(
 def star(
     # size: Any = None,
     # value: Any = None,
-    # hexorigin: Hex = Hexigo,
+    # origin_offset: Hex = Hexigo,
     # hollow: bool = False,
 ) -> HexMap:
     """Create a HexMap in the shape of a Star ★ ✡
+
+    NOT YET IMPLEMENTED
+
+    Note:
+        This is a combination of hexmap.hexagon() and six hexmap.triangle().
 
     Args:
         value (Any, optional): _description_. Defaults to None.
         axes (str, optional): _description_. Defaults to "qs".
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
@@ -1524,20 +1561,19 @@ def star(
 
 
 def polygon(
-    hexes: list[Hex] | tuple[Hex, ...],
+    hexiter: Iterable[Hex],
     value: Any = None,
-    hexorigin: Hex = Hexigo,
+    origin_offset: Hex = Hexigo,
     hollow: bool = False,
 ) -> HexMap:
     """Create a general shape polygon from an iterable of Hexes
 
-    Note:
-        Hollow is not yet supported.
+    PLAN ON ALLOWING FILLED GENERAL POLYGONS, BUT AS OF NOW THEY WILL BE HOLLOW
 
     Args:
-        hexes (list[Hex] | tuple[Hex, ...]): The hexes that the polygon will use as corners.
+        hexiter (Iterable[Hex]) The Hex to use as corners for the polygon.
         value (Any, optional): The value that should be assigned to all Hexagons. Defaults to None.
-        hexorigin (Hex, optional): The hexorigin of the shape, all Hexes will be centered around hexorigin. Defaults to Hexigo.
+        origin_offset (Hex, optional): The origin_offset of the shape, all Hexes will be centered around origin_offset. Defaults to Hexigo.
         hollow (bool, optional):  NOT SUPPORTED YET: Whether or not to make the shape hollow. Defaults to False.
 
     Returns:
@@ -1547,13 +1583,13 @@ def polygon(
     def current_and_next(hxs) -> zip[tuple[Hex, Hex]]:
         return zip(hxs, hxs[1:] + hxs[:1])  # type: ignore
 
-    hxmp = HexMap(default_value=value, origin_offset=hexorigin)
+    hxmp = HexMap(default_value=value, origin_offset=origin_offset)
 
-    for curr_hx, next_hx in current_and_next(hexes):
+    for curr_hx, next_hx in current_and_next(hexiter):
         for hx in curr_hx.linedraw(next_hx):
             hxmp.insert(hx)
 
-    # for hx in hexes:
+    # for hx in hexiter:
     #     last_hex = hx
 
     #     if first:

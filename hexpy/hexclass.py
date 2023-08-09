@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from itertools import cycle, islice
-from re import A
 from typing import TYPE_CHECKING, Iterator, Literal, Optional, overload  # , Self
 
 from .layout import Orientation
@@ -13,6 +12,76 @@ from .point import Point
 
 if TYPE_CHECKING:
     from .navigate import HexClock, HexCompass
+
+
+def _extract_coords(
+    args: tuple[float],
+    kwargs: dict[str, float],
+) -> dict[Literal["q", "r", "s"], float]:
+    """Checks and creates Hex coordinates from args and kwargs
+
+    Args:
+
+        kwargs (dict[str, float]): The kwargs to be added to coords
+
+    Raises:
+        TypeError: If a coord is specified both as positional and keyword argument.
+        TypeError: If a coord is specified multiple times as keyword argument.
+        TypeError: If a coord is not a valid Hex coordinate: q, r or s.
+        TypeError: If a coord is not of type int or float.
+        TypeError: If the number of coordinates is not 2 or 3.
+        ValueError: If the number of coordinates is 3 and they do not sum to 0.
+
+    Returns:
+        dict[str, float]: The updated coordinates
+    """
+
+    def validate_kwarg(kw: str) -> Literal["q", "r", "s"]:
+        """Return the kwarg if it is valid."""
+
+        if kw in coords:
+            raise TypeError(
+                f"Hex coordinate '{kw}' specified multiple times, first as positional argument then as keyword argument.)"
+            )
+
+        elif kw in coords:
+            raise TypeError(
+                f"Hex coordinate '{kw}' specified multiple times as keyword argument."
+            )
+
+        elif kw not in {"q", "r", "s"}:
+            raise TypeError(
+                f"Invalid keyword Hex coordinate '{kw}'. (Must be one of q, r or s)"
+            )
+
+        return kw  # type: ignore
+
+    def validate_coords() -> dict[Literal["q", "r", "s"], float]:
+        """Return the coordinates if they are valid."""
+
+        if not all(isinstance(coord, (int, float)) for coord in coords.values()):
+            raise TypeError(
+                "Invalid Hex coordinates, q, r and s must be of type 'int' or 'float'."
+            )
+
+        if not 2 <= len(coords) <= 3:
+            raise TypeError(
+                "Invalid number of Hex coordinates, must be a total of 2 or 3. (Counting both positional and keyword arguments.)"
+            )
+
+        if len(coords) == 3 and round(sum(coords.values())) != 0:
+            raise ValueError(
+                "If Hex is initialized with three coordinates, they must sum to 0. (i.e. q + r + s = 0)"
+            )
+        return coords
+
+    # First, create coords from args mapping them to __slots__
+    coords = dict(zip(("q", "r", "s"), args))
+
+    # Then, add kwargs to coords if they are all valid hex coordinates
+    coords |= {validate_kwarg(kwarg): value for kwarg, value in kwargs.items()}
+
+    return validate_coords()
 
 
 class Hex:
@@ -70,74 +139,51 @@ class Hex:
 
     """
 
-    __slots__ = ("q", "r")
+    __slots__ = ("q", "r", "s")
+    # I went back to saving all three coordinates instead of just q and r
+    # since when rounding to a number of digits the third coordinate doesn't get rounded
+    # which is rather irritating, for instance when displaying coords in hexmap plots
 
-    def __init__(
-        self,
-        q: float,
-        r: float,
-        s: Optional[float] = None,
-    ) -> None:
-        """Create a Hex.
+    # Also, if I would like to implement that I would have to save a "ndigits" attribute
+    # and use that to continously round the s property, but then I can just as well save all three coordinates.
 
-        Args:
-            q (float): Required hex coordinate.
-            r (float): Required hex coordinate.
-            s (float, optional): Optional hex coordinate. Defaults to None.
+    @overload
+    def __init__(self, q: float, r: float, s: float) -> None:
+        """Initialize from `q, r and s`, i.e. `cube coordinates`.
 
-        Raises:
-            TypeError: If `q, r or s` are not all of type `int` or `float`
-            ValueError: If `q, r and s` does not add upp to `0`
-        """
+        (Will check that `q, r and s` are valid, `q + r + s = 0`.)"""
+        ...
 
-        if not isinstance(q, (int, float)) or not isinstance(r, (int, float)):
-            raise TypeError(
-                f"{q} and {r} are of incorrect coordinate types: must be of type 'int' or 'float'"
-            )
+    @overload
+    def __init__(self, q: float, r: float) -> None:
+        """Initialize from `q and r`, i.e. `axial coordinates`.
 
-        self.q = q
-        self.r = r
+        (both `q and r` can be `positional` or `keyword arguments`)"""
+        ...
 
-        # If the user has provided the unreqired argument s, then it will check that it at least works together with q and r
-        # This is intantinal and makes cube coordinates "safer" and less prone to make mistakes in but axial still works
-        if s is not None:
-            if not isinstance(s, (int, float)):
-                raise TypeError(
-                    "if s is to be provided it must be of type 'int' or 'float'"
-                )
-            # Check that s works with q and r
-            self.s = s
+    @overload
+    def __init__(self, q: float, s: float) -> None:
+        """Initialize from `q and s`.
 
-    @property
-    def s(self) -> float:
-        return -(self.q + self.r)
+        (`s` must be a `keyword argument`)"""
+        ...
 
-    @s.setter
-    def s(self, new_s: float) -> None:
-        """This will NOT set s to anything, it will however check that the provided s is correct together with both q and r
+    @overload
+    def __init__(self, r: float, s: float) -> None:
+        """Initialize from `r and s`.
 
-        Raises:
-            ValueError: If q + r + s are not equal up to 0
+        (both `r and s` must be `keyword arguments`)"""
+        ...
 
-        Examples:
-            Let's say we create a new Hex at q = 1 and r = 2 using axial input:
-            >>> Hex(1, 2)
-            Hex(q=1, r=2, s=-3)
+    def __init__(self, *args: float, **kwargs: float) -> None:
+        coords = _extract_coords(args, kwargs)
 
-            The above can and will not check if your provided coords are correct!
+        coordsum = -sum(coords.values())
 
-            If we instead input using cube coordinates a ValueError will be raised if we accidentally provide incorrect coordinates:
-            >>> Hex(q=1, r=2, s=3)
-            ValueError: Incorrect coordinates: q + r + s must be equal to 0, but was equal to 6
-
-            This makes cube input safer than axial, due to the double check of coords, but cube input is not required and s will not be stored.
-        """
-        coord_sum = sum(self.axial_coords) + new_s
-
-        if round(coord_sum) != 0.0:
-            raise ValueError(
-                f"Incorrect coordinates: q + r + s must be equal to 0, but was equal to {coord_sum}"
-            )
+        # I am really proud of this!
+        self.q = coords.get("q", coordsum)
+        self.r = coords.get("r", coordsum)
+        self.s = coords.get("s", coordsum)
 
     # coords
 
@@ -151,22 +197,22 @@ class Hex:
         return (self.q, self.r, self.s)
 
     @cube_coords.setter
-    def cube_coords(self, new_coords: tuple[float, float, float]) -> None:
+    def cube_coords(self, new_values: tuple[float, float, float]) -> None:
         """Set the cube coords of this Hex
 
         Args:
-            new_coords (tuple[float, float, float]): The new coords, must be a three long tuple with values of type int or float.
+            new_values (tuple[float, float, float]): The new coords, must be a three long tuple with values of type int or float.
         """
         if (
-            not isinstance(new_coords, tuple)
-            or len(new_coords) != 3
-            or not all(isinstance(c, (int, float)) for c in new_coords)
+            not isinstance(new_values, tuple)
+            or len(new_values) != 3
+            or not all(isinstance(c, (int, float)) for c in new_values)
         ):
             raise TypeError(
                 "new_coords must be a 3 long tuple with values of type 'int' or 'float'"
             )
 
-        self.q, self.r, self.s = new_coords
+        self.q, self.r, self.s = new_values
 
     @property
     def axial_coords(self) -> tuple[float, float]:
@@ -178,34 +224,44 @@ class Hex:
         return (self.q, self.r)
 
     @axial_coords.setter
-    def axial_coords(self, new_coords: tuple[float, float]) -> None:
+    def axial_coords(self, new_values: tuple[float, float]) -> None:
         """Set the axial coords of this Hex
 
         Args:
-            new_coords (tuple[float, float]): The new coords, must be a two long tuple with values of type int or float.
+            new_values (tuple[float, float]): The new coords, must be a two long tuple with values of type int or float.
         """
         if (
-            not isinstance(new_coords, tuple)
-            or len(new_coords) != 2
-            or not all(isinstance(c, (int, float)) for c in new_coords)
+            not isinstance(new_values, tuple)
+            or len(new_values) != 2
+            or not all(isinstance(c, (int, float)) for c in new_values)
         ):
             raise TypeError(
                 "new_coords must be a 2 long tuple with values of type 'int' or 'float'"
             )
 
-        self.q, self.r = new_coords
+        self.q, self.r, self.s = (*new_values, -sum(new_values))
 
     @overload
     def __setitem__(
-        self, coords: tuple[str, str, str], values: tuple[float, float, float]
+        self,
+        new_coords: tuple[str, str, str],
+        new_values: tuple[float, float, float],
     ) -> None:
         ...
 
     @overload
-    def __setitem__(self, coords: tuple[str, str], values: tuple[float, float]) -> None:
+    def __setitem__(
+        self,
+        new_coords: tuple[str, str],
+        new_values: tuple[float, float],
+    ) -> None:
         ...
 
-    def __setitem__(self, coords: tuple[str, ...], values: tuple[float, ...]) -> None:
+    def __setitem__(
+        self,
+        new_coords: tuple[str, ...],
+        new_values: tuple[float, ...],
+    ) -> None:
         """Used to change q, r and s in a dict like manner
 
         Note:
@@ -213,8 +269,8 @@ class Hex:
             If two coords are provided the third will be calculated from the other two.
 
         Args:
-            coords (Iterable[str]): The coords to change
-            values (Iterable[float]): The values to coords change to
+            new_coords (Iterable[str]): The coords to change
+            new_values (Iterable[float]): The values to change coords to
 
         Example:
             >>> hx = Hex(1, 2, -3)
@@ -222,67 +278,50 @@ class Hex:
             >>> hx
             Hex(q=2, r=1, s=-3)
         """
-
-        # Tests
-
-        if not isinstance(coords, Iterable) or not isinstance(values, Iterable):
+        if not isinstance(new_coords, Iterable) or not isinstance(new_values, Iterable):
             raise TypeError("Both coords and values must be iterable.")
 
         if not all(
             coord in {"q", "r", "s"} and isinstance(value, (float, int))
-            for coord, value in zip(coords, values)
+            for coord, value in zip(new_coords, new_values)
         ):
             raise TypeError(
                 "All coords must be either 'q', 'r' or 's' and all values must be of type 'float' or 'int'"
             )
 
-        if len(coords) == 1 or len(coords) > 3:
+        if len(new_coords) == 1 or len(new_coords) > 3:
             raise ValueError(
                 "Must change either two or all three coordinates at the same time, otherwise the hex coordinates will become invalid."
             )
 
-        if len(coords) != len(values):
+        if len(new_coords) != len(new_values):
             raise ValueError(
                 "The coords (to change) and the values (to change to) must match in length."
             )
 
-        if len(coords) != len(set(coords)):
+        if len(new_coords) != len(set(new_coords)):
             raise ValueError("Cannot reference the same coord twice.")
 
-        # Code
-
-        if len(coords) == 2:
-            # When length is 2, get the implicit coord by removing the two provided coords from the set of all coords
-            # For instance, if s and r are provided, then q will become implicit and firstly calculated from the other two
-
-            implicit_coord = str(*{"q", "r", "s"} - set(coords))
-
-            if implicit_coord != "s":
-                setattr(self, implicit_coord, -sum(values))
-        else:
-            implicit_coord = "s"
-
         # create a dict which will access the coords
-        coord_dict = dict(zip(coords, values))
+        coords = dict(zip(new_coords, new_values))
 
         # loop through the coords and values while skipping s and another potential implicit coord
-        for coord, value in coord_dict.items():
-            if coord not in {"s", implicit_coord}:
-                setattr(self, coord, value)
 
-        if "s" in coords:
-            # If all three coords were provided, then the provided s will be checked that it works with q and r by calling the s.setter.
-            self.s = coord_dict["s"]
+        coordsum = -sum(coords.values())
+
+        self.q = coords.get("q", coordsum)
+        self.r = coords.get("r", coordsum)
+        self.s = coords.get("s", coordsum)
 
     @overload
     def __getitem__(self, coords: str) -> float:
         ...
 
     @overload
-    def __getitem__(self, coords: tuple[str, ...]) -> tuple[float, ...]:
+    def __getitem__(self, coords: Iterable[str]) -> tuple[float, ...]:
         ...
 
-    def __getitem__(self, coords: str | tuple[str, ...]) -> float | tuple[float, ...]:
+    def __getitem__(self, coords: str | Iterable[str]) -> float | tuple[float, ...]:
         """Used to access q, r and s in a dict like manner
 
         Args:
@@ -355,7 +394,7 @@ class Hex:
         """
         if not hasattr(self, "hexclock"):
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
         return self.directions.shifted(self)
@@ -380,7 +419,7 @@ class Hex:
         """
         if not hasattr(self, "hexclock"):
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
         return self.diagonals.shifted(self)
 
@@ -501,9 +540,21 @@ class Hex:
             This can also be done using `len(thisHex)`.
 
         Returns:
-            int: Length, you can think of this as the least amount of Hexes you have to pass through when walking from this Hex to Hexigo.
+            float: Length, you can think of this as the least amount of Hexes you have to pass through when walking from this Hex to Hexigo.
         """
         return round((abs(self.q) + abs(self.r) + abs(self.s)) / 2)
+
+    @property
+    def exact_length(self) -> float:
+        """Get the exact displacement from this Hex to Hexigo
+
+        Note:
+            This can also be done using `len(thisHex)`.
+
+        Returns:
+            float: Length, you can think of this as the least amount of Hexes you have to pass through when walking from this Hex to Hexigo.
+        """
+        return (abs(self.q) + abs(self.r) + abs(self.s)) / 2
 
     def __len__(self) -> int:
         """Get the displacement from this Hex to Hexigo"""
@@ -527,7 +578,24 @@ class Hex:
         if not isinstance(other, Hex):
             raise TypeError(f"other must be of type 'Hex', not {type(other)}")
 
-        return len(self - other)
+        return (self - other).length
+
+    def exact_distance(self, other: Hex) -> float:
+        """Get the exact displacement from this Hex to other Hex
+
+        Args:
+            other (Hex, optional): The Hex to get distance to if `other` is omitted `Hexigo` will be used. Defaults to None.
+
+        Raises:
+            TypeError: If `other` is not of type `Hex`.
+
+        Returns:
+            int: The distance, which can be thought of as the least amount of Hexes you have to pass through when walking from this Hex to other.
+        """
+        if not isinstance(other, Hex):
+            raise TypeError(f"other must be of type 'Hex', not {type(other)}")
+
+        return (self - other).exact_length
 
     # negation
 
@@ -816,25 +884,11 @@ class Hex:
         """Always returns True since it is an object"""
         return True
 
-    def __lt__(self, other: Hex) -> bool:
-        """Check if this Hex is closer to Hexigo compared to other Hex"""
-        return len(self) < len(other)
-
-    def __le__(self, other: Hex) -> bool:
-        """Check if this Hex is closer or equally far to Hexigo compared to other Hex"""
-        return len(self) <= len(other)
-
-    def __gt__(self, other: Hex) -> bool:
-        """Check if this Hex is farther from Hexigo compared to other Hex"""
-        return len(self) > len(other)
-
-    def __ge__(self, other: Hex) -> bool:
-        """Check if this Hex is farther or equally far from Hexigo compared to other Hex"""
-        return len(self) <= len(other)
-
-    def __contains__(self, c: float) -> bool:
+    def contains(self, value: float) -> bool:
         """Check if this Hex contains the provided coordinate"""
-        return c in self.cube_coords
+        return value in self.cube_coords
+
+    __contains__ = contains
 
     # left rotation
 
@@ -1189,37 +1243,40 @@ class Hex:
 
     # reflection
 
-    def reflect(self, axis: Literal["q", "r", "s"]) -> None:
+    def reflect(self, axis: str) -> None:
         """Inplace reflect the Hex over the axis
 
         Args:
             axis (Literal['q', 'r', 's']): The axis to reflect over, either 'q', 'r' or 's'
 
         Raises:
-            ValueError: _description_
+            ValueError: If `axis` is not 'q', 'r' or 's'
         """
-        if axis not in {"q", "r", "s"}:
-            raise ValueError("Axis must be either 'q', 'r' or 's'")
-
-        elif axis == "q":
+        if axis == "q":
             self.r = self.s
 
         elif axis == "r":
             self.q = self.s
 
         elif axis == "s":
-            self.axial_coords = self.r, self.q
+            self.q = self.r
 
-        # this works but is 10 times slower!
+        else:
+            raise ValueError("Axis must be either 'q', 'r' or 's'")
+
+        # I also thought of this and it works but is 10 times slower!
         # coords = tuple({"q", "r", "s"} - {axis})
         # self[coords] = self[coords[::-1]]
 
-    def reflect_around(self, other: Hex, axis: Literal["q", "r", "s"]) -> None:
+    def reflect_around(self, other: Hex, axis: str) -> None:
         """Inplace reflect the Hex over other Hex
 
         Args:
             other (Hex): The other Hex to reflect over
             axis (Literal['q', 'r', 's']): The axis to reflect over, either 'q', 'r' or 's'
+
+        Raises:
+            TypeError: If `other` is not of type `Hex`
         """
         if not isinstance(other, Hex):
             raise TypeError(f"other must be of type 'Hex', not {type(other)}")
@@ -1228,19 +1285,19 @@ class Hex:
         self.reflect(axis)
         self += other
 
-    def reflected(self, axis: Literal["q", "r", "s"]) -> Hex:
+    def reflected(self, axis: str) -> Hex:
         """Reflect the Hex over the axis
 
         Args:
             axis (Literal['q', 'r', 's']): The axis to reflect over, either 'q', 'r' or 's'
 
+        Raises:
+            ValueError: If `axis` is not 'q', 'r' or 's'
+
         Returns:
             Hex: This Hex reflected over other Hex
         """
-        if axis not in {"q", "r", "s"}:
-            raise ValueError("Axis must be either 'q', 'r' or 's'")
-
-        elif axis == "q":
+        if axis == "q":
             return Hex(self.q, self.s, self.r)
 
         elif axis == "r":
@@ -1249,17 +1306,17 @@ class Hex:
         elif axis == "s":
             return Hex(self.r, self.q, self.s)
 
-        # The following works but is less clear and 4 times slower
-        # coords = tuple({"q", "r", "s"} - {axis})
-        # reflected_hex = Hex(0, 0, 0)
-        # reflected_hex[coords] = self[coords[::-1]]
-        # return reflected_hex
+        else:
+            raise ValueError("Axis must be either 'q', 'r' or 's'")
 
-    def reflected_around(self, other: Hex, axis: Literal["q", "r", "s"]) -> Hex:
+    def reflected_around(self, other: Hex, axis: str) -> Hex:
         """Reflect the Hex over other Hex
 
         Args:
             other (Hex): The other Hex to reflect over
+
+        Raises:
+            TypeError: If `other` is not of type `Hex`
 
         Returns:
             Hex: This Hex reflected over other Hex
@@ -1306,10 +1363,12 @@ class Hex:
             TypeError: If `factor` is not of type `float` or `int`
         """
         if not isinstance(factor, (float, int)):
-            raise TypeError(f"t must be of type 'float' or 'int', not {type(factor)}")
+            raise TypeError(
+                f"factor must be of type 'float' or 'int', not {type(factor)}"
+            )
 
-        self.q -= 1e-06 * factor
-        self.r += 1e-06 * factor
+        self.q += 1e-06 * factor
+        self.r += 2e-06 * factor
 
     def nudged(self, factor: float = 1) -> Hex:
         """Nudge Hex in a consistent direction.
@@ -1325,7 +1384,7 @@ class Hex:
         if not isinstance(factor, (float, int)):
             raise TypeError(f"t must be of type 'float' or 'int', not {type(factor)}")
 
-        return Hex(self.q + 1e-06 * factor, self.r + 1e-06 * factor)
+        return Hex(self.q + 1e-06 * factor, self.r + 2e-06 * factor)
 
     def linedraw(self, other: Hex) -> Iterator[Hex]:
         """Yield all Hexes amongst a line between this Hex and other Hex
@@ -1349,13 +1408,13 @@ class Hex:
         # for i in range(steps + 1):
         #     yield round(nudged_self.lerp_to(nudged_other, i * step_size))
 
-        self.nudge()
-        other.nudge()
+        nudged_self = self.nudged()
+        nudged_other = other.nudged()
 
         step_size = 1.0 / max(steps, 1)
 
         for i in range(steps + 1):
-            yield self.lerp(other, i * step_size).rounded()
+            yield nudged_self.lerp(nudged_other, i * step_size).rounded()
 
     # points and pixels
 
@@ -1374,7 +1433,7 @@ class Hex:
 
         if not hasattr(self, "hexlayout"):
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
         O = self.hexlayout.orientation
@@ -1406,11 +1465,8 @@ class Hex:
         """
         return round(self.to_point())
 
-    def corner_offset(self, idx: int) -> Point:
-        """Return corner offset from center of this Hex at index idx
-
-        Args:
-            idx (int): The index of the corner to get
+    def corner_offsets(self) -> Iterator[Point]:
+        """Yield all 6 corner offsets from center of this Hex
 
         Raises:
             ValueError: If a Layout is not yet defined.
@@ -1418,22 +1474,22 @@ class Hex:
         Returns:
             Point: A Point which is the offset from the centerpoint to the corner at idx
         """
-
         if not hasattr(self, "hexlayout"):
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
-        size = self.hexlayout.size
-        start_angle = self.hexlayout.orientation.start_angle
+        for idx in range(6):
+            size = self.hexlayout.size
+            start_angle = self.hexlayout.orientation.start_angle
 
-        angle = 2.0 * math.pi * (start_angle - idx) / 6.0
-        trig_vec = Point(math.cos(angle), math.sin(angle))
+            angle = 2.0 * math.pi * (start_angle - idx) / 6.0
+            trig_vec = Point(math.cos(angle), math.sin(angle))
 
-        return trig_vec * size
+            yield trig_vec * size
 
-    def polygon_points(self, factor: float = 1) -> Iterable[Point]:
-        """Yeild all exact points forming self as a polygon.
+    def polygon_points(self, factor: float = 1) -> tuple[Point, ...]:
+        """Return all exact points forming this Hex as a polygon.
 
         Note:
             `.polygon_points()` returns the same as `.polygon_pixels()` but `without rounding` the result.
@@ -1444,19 +1500,21 @@ class Hex:
         Raises:
             ValueError: If a Layout is not yet defined.
 
-        Yields:
-            Iterator[Point]: The pixels forming this Hex as a polygon
+        Returns:
+            tuple[Point, ...]: The pixels forming this Hex as a polygon
         """
-
         center = self.to_point()
 
-        for i in range(6):
-            offset = self.corner_offset(i)
+        return tuple(center + offset * factor for offset in self.corner_offsets())
 
-            yield center + offset * factor
+        # NOTE, changed this to tuple comprehension instead of generator, since both matplotlib and pygame expect a tuple
+        # for i in range(6):
+        #     offset = self.corner_offset(i)
 
-    def polygon_pixels(self, factor: float = 1) -> Iterator[Point]:
-        """Yeild all pixels forming self as a polygon
+        #     yield center + offset * factor
+
+    def polygon_pixels(self, factor: float = 1) -> tuple[Point, ...]:
+        """Return all pixels forming this Hex as a polygon
 
         Note:
             `.polygon_pixels()` returns the same as `.polygon_points()` but `rounds` the result.
@@ -1470,68 +1528,54 @@ class Hex:
         Yields:
             Iterator[Point]: The pixels forming this Hex as a polygon
         """
-        for point in self.polygon_points(factor):
-            yield round(point)
+        center = self.to_point()
+
+        return tuple(
+            round(center + offset * factor) for offset in self.corner_offsets()
+        )
 
     @classmethod
-    def from_pixel(cls, pixel: Point | tuple[float, float]) -> Hex:
-        """Return the rounded Hex closest to the provided pixel based on the Hex layout.
-
-        Note:
-            `.from_pixel()` returns the same as `.from_point()` but `rounds` the result.
-
-        Args:
-            pixel (Point | tuple[float, float]): The pixel to calculate from.
-
-        Raises:
-            ValueError: If a Layout is not yet defined.
-
-        Returns:
-            Hex: The Hex closest to the provided pixel
-        """
-        return round(cls.from_point(pixel))
-
-    @classmethod
-    def from_point(cls, pixel: Point | tuple[float, float]) -> Hex:
+    def from_pixel(
+        cls,
+        point: Point | tuple[float, float],
+        ndigits: Optional[int] = None,
+    ) -> Hex:
         """Return the Hex closest to the provided point based on the Hex layout.
 
-        Note:
-            `.from_point()` returns the same as `.from_pixel()` without `rounding` the result.
-
         Args:
             pixel (Point | tuple[float, float]): The pixel to calculate from.
+            ndigits (int, optional): Number of digits to round to. Defaults to None.
 
         Raises:
             ValueError: If a Layout is not yet defined.
 
         Returns:
-            Hex: The Hex closest to the provided pixel
+            Hex: The Hex closest to the provided point
         """
-
         if cls.hexlayout is None:
             raise ValueError(
-                "'Layout' has not yet been defined, use Hex.hexlayout = 'Layout.pointy()' or 'Layout.flat()' to define a layout."
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
         O = cls.hexlayout.orientation
         size = cls.hexlayout.size
         origin = cls.hexlayout.origin
 
-        pt = Point(*pixel)
+        pt = Point(*point)
         pt -= origin
         pt /= size
 
         q = O.b0 * pt.x + O.b1 * pt.y
         r = O.b2 * pt.x + O.b3 * pt.y
 
-        return Hex(q, r)
+        return round(Hex(q, r), ndigits)
 
     # layouts
 
     @classmethod
     def pointy_layout(
         cls,
-        size: int | tuple[int, int] = 1,
+        size: int | tuple[int, int],
         origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
@@ -1549,7 +1593,7 @@ class Hex:
     @classmethod
     def flat_layout(
         cls,
-        size: int | tuple[int, int] = 1,
+        size: int | tuple[int, int],
         origin: tuple[int, int] = (0, 0),
     ) -> None:
         """_summary_
@@ -1568,7 +1612,7 @@ class Hex:
     def custom_layout(
         cls,
         orientation: Orientation,
-        size: int | tuple[int, int] = 1,
+        size: int | tuple[int, int],
         origin: tuple[int, int] = (0, 0),
         clockdict: Optional[dict[int, Hex]] = None,
         compassdict: Optional[dict[str, Hex]] = None,
@@ -1616,7 +1660,7 @@ class Hex:
 
         if not hasattr(cls, "hexclock"):
             raise RuntimeError(
-                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout(*args)', 'Hex.pointy_layout(*args)' or 'Hex.custom_layout(*args)'"
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
         return cls.hexclock[hours]
@@ -1647,7 +1691,7 @@ class Hex:
 
         if not hasattr(cls, "hexcompass"):
             raise RuntimeError(
-                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout(*args)', 'Hex.pointy_layout(*args)' or 'Hex.custom_layout(*args)'"
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
         return cls.hexcompass[points]

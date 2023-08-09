@@ -1,87 +1,86 @@
 from hexpy import Hex, hexmap
 
-hexboard: hexmap.HexMap
 turn: int = 1
 
 
-def update() -> None:
+def update(hxmp: hexmap.HexMap) -> None:
     "Update the board, removing old possible positons and creating the new ones"
 
     def update_in_direction(pos: Hex, dir: Hex, ctr: int = 0) -> None:
         "Recursively update from position in direction"
 
-        if pos in hexboard.hexes():
+        if pos in hxmp.hexes():
             # Check the next in the direction
-            if hexboard[pos] == -turn:
+            if hxmp[pos] == -turn:
                 update_in_direction(pos + dir, dir, ctr + 1)
 
-            elif ctr > 0 and hexboard[pos] == 0:
-                hexboard[pos] = 2 * turn
+            elif ctr > 0 and hxmp[pos] == 0:
+                hxmp[pos] = 2 * turn
 
     # Reset all possible positions of the other player
-    for position in hexboard.get_hexes(-2 * turn):
-        hexboard[position] = 0
+    for position in hxmp.get_hexes(-2 * turn):
+        hxmp[position] = 0
 
     # Get all positions belonging to current player
-    for position in hexboard.get_hexes(turn):
+    for position in hxmp.get_hexes(turn):
         for i, neighbor in position.direct_neighbors.items():
             # Check that it is in the map/board
-            if neighbor in hexboard:
+            if neighbor in hxmp:
                 update_in_direction(neighbor, Hex.o_clock(i))
 
 
-def flip(position: Hex) -> None:
+def flip(hxmp: hexmap.HexMap, position: Hex) -> None:
     "Flip the board from the position"
 
     def flip_in_direction(pos: Hex, dir: Hex, ctr: int = 0) -> None:
         "Recursively flip from position in direction"
 
-        if pos in hexboard:
+        if pos in hxmp:
             # Check the next in the direction
-            if hexboard[pos] == -turn:
+            if hxmp[pos] == -turn:
                 flip_in_direction(pos + dir, dir, ctr + 1)
 
-            elif ctr > 0 and hexboard[pos] == turn:
+            elif ctr > 0 and hxmp[pos] == turn:
                 for to_flip in position.linedraw(pos):
-                    hexboard[to_flip] = turn
+                    hxmp[to_flip] = turn
 
-    hexboard[position] = turn
+    hxmp[position] = turn
 
     for i, neighbor in position.direct_neighbors.items():
         flip_in_direction(neighbor, Hex.o_clock(i))
 
 
-def start() -> None:
+def start(hxmp: hexmap.HexMap) -> None:
     "Call this to start the game"
 
-    update()
+    update(hxmp)
 
 
-def check() -> bool:
+def check(hxmp: hexmap.HexMap) -> bool:
     "Check if the current player can place anything"
 
-    possible_moves = tuple(hexboard.get_hexes(2 * turn))
+    possible_moves = tuple(hxmp.get_hexes(2 * turn))
 
     return bool(possible_moves)
 
 
-def make_move(position: Hex) -> bool:
+def make_move(hxmp: hexmap.HexMap, position: Hex) -> bool:
     global turn
 
-    if position in hexboard.get_hexes(2 * turn):
+    if position in hxmp.get_hexes(2 * turn):
         # Flip pieces around the clicked hex
-        flip(position)
+        flip(hxmp, position)
 
         turn *= -1
 
         # Prepare the board for the next turn
-        update()
+        update(hxmp)
 
-        if not check():
+        if not check(hxmp):
             print("can't place")
 
             turn *= -1
-            update()
+            update(hxmp)
 
         return True
 

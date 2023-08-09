@@ -1,29 +1,31 @@
-import ctypes
+"""Demo of hexagonal game of life."""
 import math
 
 import pygame as p
-from PIL import Image
+from pygame import gfxdraw
 
 from hexpy import Hex, hexmap
 
-ctypes.windll.user32.SetProcessDPIAware()
+# import ctypes
+# ctypes.windll.user32.SetProcessDPIAware()
 
 WHITE = (255, 255, 255)
 GRAY = (100, 100, 100)
 BLACK = (0, 0, 0)
 
 
-def draw(surface: p.Surface, hexmap: hexmap.HexMap) -> None:
-    "Draw the hexmaps on surface"
+def draw(surface: p.Surface, hexmap: hexmap.HexMap, k: float = 0.85) -> None:
+    """Draw the hexmap on the surface."""
 
     # min_size = min(Hex.layout.size)
 
-    k = 0.9
+    for hx, col in hexmap.hexes_and_values():
+        polygon = hx.polygon_pixels(k)
 
-    for hex, color in hexmap.hexes_and_values():
-        polygon = tuple(hex.polygon_pixels(k))
+        gfxdraw.filled_polygon(surface, polygon, col)  # fill
+        gfxdraw.aapolygon(surface, polygon, col)  # outline
 
-        p.draw.polygon(surface, color, polygon)
+        # p.draw.polygon(surface, col, polygon)
 
 
 def click(
@@ -38,7 +40,7 @@ def click(
     return hexmap
 
 
-def update(board: hexmap.HexMap, r: int) -> hexmap.HexMap:
+def update(board: hexmap.HexMap) -> hexmap.HexMap:
     """Update the game of life HexMap"""
 
     new_hexmap = board.copy()
@@ -56,33 +58,30 @@ def update(board: hexmap.HexMap, r: int) -> hexmap.HexMap:
     return new_hexmap
 
 
-width = 1200
+width = 1000
 height = round((math.sqrt(3) / 2) * width)
 
 r = 20
 s = round((height / ((r + 1) * 2)) * 2 / 3)
 
+# PYGAME
 p.init()
 screen = p.display.set_mode((width, height), 0, 32)
-p.display.set_caption("Hexagonal Game of Life")
+p.display.set_caption(
+    "Hexagonal Game of Life, SPACE to play/pause, C to clear, CLICK to add/remove cells"
+)
 
-# Define our Hexagonal layout
-# Hex.layout = hexlayout.pointy(size=s, origin=(width // 2, height // 2))
-# Hex.clock = hexclock.pointy()
-
+# HEXPY
 Hex.pointy_layout(size=s, origin=(width // 2, height // 2))
-# Hex.flat_layout(size=s, origin=(width // 2, height // 2))
-# Hex.custom_layout(
-#     size=s, origin=(width // 2, height // 2), orientation=hexlayout.Orientation()
-# )
-
 
 # Create a HexMap object in the shape of a hexagon
 board = hexmap.hexagon(radius=r, value=BLACK)
 
-board += hexmap.hexagon(radius=r, value=WHITE, hollow=True)
+# Add a hollow hexagon of white hexes
+board[hexmap.hexagon(radius=r, hollow=True)] = WHITE
 
-# board.plot(factor=0.9)
+# Plot the board using the default plot function
+# board.plot(factor=0.85)
 
 clock = p.time.Clock()
 fps = 60
@@ -96,7 +95,6 @@ while run:
     for event in p.event.get():
         if event.type == p.QUIT:
             run = False
-            p.quit()
 
         if event.type == p.KEYDOWN:
             if event.key == p.K_SPACE:
@@ -123,7 +121,7 @@ while run:
                 clicking = False
 
     if play and frame % 6 == 0:
-        board = update(board, r)
+        board = update(board)
         frame = 1
 
     # update

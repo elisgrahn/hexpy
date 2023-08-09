@@ -1,4 +1,5 @@
-from typing import Any, Optional
+"""Demo of a mobile game called Hexxagon."""
+from typing import Optional
 
 import pygame as p
 
@@ -99,10 +100,6 @@ def count(hxmp: hexmap.HexMap):
     p.display.set_caption(f"Hexxagon      YOU: {p1}      ENEMY: {p2}")
 
 
-#     if moves is not None and clicked in moves:
-#         if moves[clicked] == "spread":
-#             spread(board)
-
 # PYGAME
 p.init()
 p.display.set_caption("Hexxagon")
@@ -125,8 +122,8 @@ second_neighbors = hexmap.hexagon(2, "jump", hollow=True)
 
 move_mask = direct_neighbors | second_neighbors
 
+# Tests before pygame
 # test_move_mask = eval(repr(move_mask))
-
 
 # print(move_mask == test_move_mask)
 # move_mask.plot({1: "g", 2: "orange"})

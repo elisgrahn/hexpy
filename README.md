@@ -6,7 +6,7 @@ using **hexpy** together with PIL and pygame*.
 
 # **hexpy**
 
-The purpose of **hexpy** is to provide a high level library that eases working with hexagonal grids in python with a big focus on easy to read code.
+The purpose of **hexpy** is a hobby project that eases working with hexagonal grids in python, with a big focus on easy to read code.
 
 > **Note**
 > This work has been heavily inspired by the beautiful work of [**redblobgames**](https://www.redblobgames.com/grids/hexagons/), who provide a fantastic post about ways to represent hexagonal grids with both illustrations and code examples.
