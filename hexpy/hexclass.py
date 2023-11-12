@@ -347,8 +347,42 @@ class Hex:
             return get_coord(coords)
 
         return tuple(get_coord(coord) for coord in coords)
+    
+    # width, height, horizontal and vertical spacing
+    
+    @property
+    def width(self) -> float:
+        """Returns the width of a Hex in pixels"""
+        if not hasattr(self, "hexlayout"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
+            )
+        return self.hexlayout.width
+    
+    @property
+    def height(self) -> float:
+        """Returns the height of a Hex in pixels"""
+        if not hasattr(self, "hexlayout"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
+            )
+        return self.hexlayout.height
+    
+    @property
+    def horiz(self) -> float:
+        """Returns the horizontal spacing between Hexes"""
+        return self.hexlayout.horizontal_spacing
+    
+    horizontal_spacing = horiz
 
-    # directions and neighbors
+    @property
+    def vert(self) -> float:
+        """Returns the vertical spacing between Hexes"""
+        return self.hexlayout.vertical_spacing
+
+    vertical_spacing = vert
+
+    # grid directions and neighbors
 
     @property
     def directions(self) -> HexClock:
@@ -1590,6 +1624,7 @@ class Hex:
         cls.hexclock = navigate.pointy_clock()
         cls.hexcompass = navigate.pointy_compass()
 
+    # TODO flat_layout should take a "from_height" or "from_width" argument alongside the size
     @classmethod
     def flat_layout(
         cls,

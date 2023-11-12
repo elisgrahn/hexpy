@@ -28,11 +28,10 @@ def paint_board(
     return hxmp
 
 
-def get_pieces() -> set[Bishop | King | Knight | Pawn | Queen | Rook]:
-    """Get a set of all pieces in their starting positions"""
+def get_pieces() -> dict[str, set[Bishop | King | Knight | Pawn | Queen | Rook]]:
+    """Get a dict with a keys for each team pointing to a set of all pieces in their starting positions"""
 
-    # TODO want to use hexpy.hexset.new() instead!
-    pieces = set()
+    pieces: dict[str, set] = {"white": set(), "black": set()}
 
     for team in "white", "black":
         for piece in Bishop, King, Knight, Pawn, Queen, Rook:
@@ -43,6 +42,6 @@ def get_pieces() -> set[Bishop | King | Knight | Pawn | Queen | Rook]:
             )
 
             for pos in positions:
-                pieces.add(piece(pos, team))
+                pieces[team].add(piece(pos, team))
 
     return pieces

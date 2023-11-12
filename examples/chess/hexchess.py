@@ -1,9 +1,10 @@
 """Still WIP demo of hexagonal chess."""
 import ctypes
+import math
 from typing import Optional
 
 import pygame as p
-from pieces import Bishop, King, Knight, Pawn, Queen, Rook
+from pieces import Bishop, King, Knight, Pawn, Queen, Rook, opponent
 from pygame import gfxdraw
 from utils import get_pieces, paint_board
 
@@ -18,7 +19,7 @@ BLACK = (35, 35, 35)
 WHITE = (220, 220, 220)
 
 GRAY = (120, 120, 120)
-RED = (200, 0, 0)
+GREEN = (255, 0, 255)
 DARKBROWN = (37, 26, 20)
 # Copilot's DARKBROWN = (50, 25, 0)
 
@@ -40,7 +41,7 @@ LIGHTEST = (255, 207, 159)
 def draw(
     surface: p.Surface,
     board: hexmap.HexMap,
-    pieces: set[Bishop | King | Knight | Pawn | Queen | Rook],
+    pieces: dict[str, set[Bishop | King | Knight | Pawn | Queen | Rook]],
     held: Optional[Bishop | King | Knight | Pawn | Queen | Rook] = None,
 ) -> None:
     """Draw the board and pieces using pygame.gfxdraw."""
@@ -49,25 +50,40 @@ def draw(
         hx: Hex,
         col: tuple[int, int, int],
         factor: float = 1,
+        filled: bool = True,
     ) -> None:
         polygon = tuple(hx.polygon_pixels(factor))
 
-        gfxdraw.filled_polygon(surface, polygon, col)  # fill
-        gfxdraw.aapolygon(surface, polygon, TRUEBLACK)  # outline
+        if filled:
+            gfxdraw.filled_polygon(surface, polygon, col)  # fill
+            gfxdraw.aapolygon(surface, polygon, TRUEBLACK)  # outline
+        else:
+            gfxdraw.aapolygon(surface, polygon, col)  # outline
 
     surface.fill(DARKBROWN)
 
     for hx, color in board.hexes_and_values():
         draw_hex(hx, color)
 
-    for piece in pieces:
-        draw_hex(piece.pos, BLACK if piece.team == "black" else WHITE)
+    for piece in pieces["white"] | pieces["black"]:
+        # Add sprite drawing here
+
+        # sprite_path = f"pieces-basic-png/{piece.team}-{str(piece.__class__).lower()}.png"
+
+        # Use pygame to load the image
+        # piece.image = p.image.load(sprite_path).convert_alpha()
+
+        piece.rect.center = piece.pos.to_pixel()
+
+        screen.blit(piece.image, piece.rect)
+
+        # draw_hex(piece.pos, BLACK if piece.team == "black" else WHITE)
 
     if held is not None:
-        draw_hex(held.pos, RED, 0.25)
+        draw_hex(held.pos, GREEN, filled=False)
 
         # TODO fix this
-        for move in board & held.movemap:
+        for move in held.possible_moves(board, pieces):  # held.movemap:
             draw_hex(move, GRAY, 0.25)
 
         # else:
@@ -76,23 +92,37 @@ def draw(
     p.display.flip()
 
 
+def kill(
+    pos: Hex,
+) -> None:
+    """Kill the piece at the given position"""
+
+    for piece in pieces[opponent(turn)]:
+        if piece.pos == pos:
+            pieces[opponent(turn)].discard(piece)
+            del piece
+            break
+
+
 # PYGAME
 p.init()
 
 fps = 30
 clock = p.time.Clock()
 
-width, height = 1000, 1000
+width, height = 1300, 1300
 screen = p.display.set_mode((width, height))
 p.display.set_caption("Hexagonal Chess")
 
-
 # HEXPY
-Hex.flat_layout(50, (width // 2, height // 2))
+# TODO layout should take a "from_height" or "from_width" argument alongside the size
+Hex.flat_layout(65, (width // 2, height // 2))
 
 # board contains color information while pieces contains piece information
 board = paint_board(hexmap.hexagon(5), (LIGHT, LIGHTER, LIGHTEST))
 pieces = get_pieces()
+
+turn = "white"  # White starts
 
 # piece = Knight
 # team = "white"
@@ -123,22 +153,21 @@ while run:
             run = False
 
         if event.type == p.MOUSEBUTTONDOWN and event.button == 1:
-            pos = Hex.from_pixel(p.mouse.get_pos())
+            clicked = Hex.from_pixel(p.mouse.get_pos())
 
-            # reset held if clicked on held piece
-            if pos == held:
+            if held and clicked == held.pos:
                 held = None
 
-            for piece in pieces:
-                if pos == piece.pos:
-                    held = piece
-
-            if held and pos in held.movemap:
-                # Move the piece
-                held.move(pos)
+            elif held and clicked in held.possible_moves(board, pieces):
+                kill(clicked)
+                held.move(clicked)
                 held = None
+                turn = opponent(turn)
 
-            # print(f"Clicked on {pos} and holding {held}")
+            else:
+                for piece in pieces[turn]:
+                    if clicked == piece.pos:
+                        held = piece
 
     draw(screen, board, pieces, held)
 

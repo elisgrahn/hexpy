@@ -133,6 +133,55 @@ class Layout:
         else:
             # TODO
             raise TypeError("")
+    
+    @property
+    def width(self) -> int:
+        """Returns the width of the hexes in pixels based on the size and orientation"""
+        if self.orientation == flat_orientation:
+            return self.size.x * 2
+        
+        elif self.orientation == pointy_orientation:
+            return sqrt(3) * self.size.x
+
+        else: 
+            raise TypeError("Width is not defined for custom orientations")
+    
+    @property
+    def height(self) -> int:
+        """Returns the height of the hexes in pixels based on the size and orientation"""
+        if self.orientation == flat_orientation:
+            return sqrt(3) * self.size.y
+        
+        elif self.orientation == pointy_orientation:
+            return 2 * self.size.y
+
+        else: 
+            raise TypeError("Width is not defined for custom orientations")
+    
+    @property
+    def horizontal_spacing(self) -> int:
+        """Returns the horizontal spacing between hexes in pixels based on the size and orientation"""
+        if self.orientation == flat_orientation:
+            return 3/2 * self.size.x
+        
+        elif self.orientation == pointy_orientation:
+            return sqrt(3) * self.size.x
+
+        else: 
+            raise TypeError("horizontal_spacing is not defined for custom orientations")
+        
+    @property
+    def vertical_spacing(self) -> int:
+        """Returns the vertical spacing between hexes in pixels based on the size and orientation"""
+        if self.orientation == flat_orientation:
+            return sqrt(3) * self.size.y
+
+        elif self.orientation == pointy_orientation:
+            return 3/2 * self.size.y
+
+        else: 
+            raise TypeError("vertical_spacing is not defined for custom orientations")
+        
 
     def __repr__(self) -> str:
         """Return a nicely formated string of Layout"""

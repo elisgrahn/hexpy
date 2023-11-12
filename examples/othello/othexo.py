@@ -1,7 +1,6 @@
 import math
 
 import pygame as p
-from flask import g
 from pygame import gfxdraw
 from utils import make_move, start
 

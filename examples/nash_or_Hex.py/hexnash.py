@@ -4,7 +4,6 @@ from typing import Optional
 
 import pygame as p
 from pygame import gfxdraw
-from pyrsistent import b
 
 from hexpy import Hex, hexmap
 from hexpy.point import Point

@@ -167,7 +167,7 @@ clock = p.time.Clock()
 
 width, height = 1000, 1000
 screen = p.display.set_mode((width, height))
-p.display.set_caption("Hexagonal Chess")
+p.display.set_caption("Chinese Checkers")
 
 Hex.pointy_layout(35, (width // 2, height // 2))
 
