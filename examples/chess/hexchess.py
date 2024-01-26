@@ -145,6 +145,7 @@ turn = "white"  # White starts
 # quit()
 held = None
 run = True
+ctr = 0
 while run:
     clock.tick(fps)
 
@@ -154,6 +155,9 @@ while run:
 
         if event.type == p.MOUSEBUTTONDOWN and event.button == 1:
             clicked = Hex.from_pixel(p.mouse.get_pos())
+
+            p.image.save(screen, f"tmp/{(ctr := ctr + 1):03d}.png")
+            print(ctr)
 
             if held and clicked == held.pos:
                 held = None

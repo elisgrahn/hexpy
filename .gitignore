@@ -3,14 +3,12 @@ dev/
 *test*.ipynb
 *.pkl
 *test*.py
-tests
-/res/hidden/
+res/hidden/
 example_google.py
-/hexpyi
-/hexpy/hexmath.py
-/animate_logo_test
-/examples/chess/game.py
+hexpy/hexmath.py
+examples/chess/game.py
 */accordion*
+tmp/
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/python

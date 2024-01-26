@@ -148,7 +148,6 @@ while run:
 
         if event.type == p.MOUSEBUTTONDOWN:
             if clicked := click(board, p.mouse.get_pos()):
-                #
                 if moves is None or board[clicked] == turn:
                     moves = get_moves(board, clicked, turn)
                     origin = clicked

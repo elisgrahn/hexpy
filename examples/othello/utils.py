@@ -77,8 +77,6 @@ def make_move(hxmp: hexmap.HexMap, position: Hex) -> bool:
         update(hxmp)
 
         if not check(hxmp):
-            print("can't place")
-
             turn *= -1
             update(hxmp)
 

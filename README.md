@@ -1,8 +1,8 @@
-![hexpy logo](https://github.com/ElisGrahn/hexpy/blob/main/res/logo.gif)
+![hexpy logo](./res/hexpylogo.gif)
 
-*The logo was created as an 
-[**example**](https://github.com/ElisGrahn/hexpy/tree/main/examples/animate_logo) 
-using **hexpy** together with PIL and pygame*.
+<!-- *The logo was created as an 
+[**example**](https://github.com/ElisGrahn/hexpy/tree/master/examples/animate_logo) 
+using **hexpy** together with PIL and pygame*. -->
 
 # **hexpy**
 
