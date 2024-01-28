@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Generator, Optional, overload
+from typing import Any, Generator, Iterable, overload
 
 from .hexclass import Hex
 from .layout import Orientation, flat_orientation, pointy_orientation
@@ -57,49 +57,78 @@ class HexClock(dict):
         """
         return HexClock({h: hx + clk_hx for h, clk_hx in self.items()})
 
+    __add__ = shifted
+    __radd__ = shifted
+
     @overload
-    def __getitem__(self, hours: int) -> Hex:
+    def at_hour(self, hours: int) -> Hex:
         ...
 
     @overload
-    def __getitem__(self, hours: slice | tuple[int, ...]) -> HexClock:
+    def at_hour(self, hours: slice | Iterable[int]) -> HexClock:
         ...
 
-    def __getitem__(self, hours: int | slice | tuple[int, ...]) -> Hex | HexClock:
+    def at_hour(self, hours: int | slice | Iterable[int]) -> Hex | HexClock:
         """Get Hex at clock hour(s)
 
         Args:
-            __key (str | tuple[str]): _description_
+            hours (int | Iterable[int]): _description_
 
         Returns:
-            Hex: _description_
+            Hex | HexClock: _description_
         """
 
         if isinstance(hours, int):
-            if not 0 <= hours <= 12:
+            if hours not in self:
                 raise KeyError(f"HexClock has no hour '{hours}'")
 
             return super().__getitem__(hours % 12)
 
-        elif isinstance(hours, tuple):
+        elif isinstance(hours, Iterable):
             if not all(isinstance(h, int) for h in hours):
                 raise TypeError(
-                    "If a HexClock is provided a tuple, all items must be of type 'int'"
+                    "If a HexClock is provided an Iterable, all items must be of type 'int'"
                 )
-
-            return HexClock({h % 12: self[h] for h in hours if h % 12 in self})
+            return HexClock({h % 12: self[h] for h in hours})
 
         elif isinstance(hours, slice):
-            return HexClock(
-                {h % 12: self[h] for h in range(*hours.indices(13)) if h % 12 in self}
-            )
+            return HexClock({h % 12: self[h] for h in range(*hours.indices(13))})
 
         else:
-            raise TypeError("HexClock key must be of type 'int', 'tuple' or 'slice'")
+            raise TypeError("HexClock hours must be of type 'int', 'Iterable' or 'slice'")
+    
+    __getitem__ = at_hour
+    __call__ = at_hour # Because why not?
 
-    # Because why not?
-    __call__ = __getitem__
+    @overload
+    def at_angle(self, angles: int) -> Hex:
+        ...
 
+    @overload
+    def at_angle(self, angles: slice | Iterable[int]) -> HexClock:
+        ...
+    
+    def at_angle(self, angles: int | slice | Iterable[int]) -> Hex | HexClock:
+        
+        if isinstance(angles, int):
+            if angles // 30 not in self:
+                raise KeyError(f"HexClock has no angle '{angles}'")
+
+            return super().__getitem__(angles // 30)
+
+        elif isinstance(angles, Iterable):
+            if not all(isinstance(a, int) for a in angles):
+                raise TypeError(
+                    "If a HexClock is provided an Iterable, all items must be of type 'int'"
+                )
+            return HexClock({a: self.at_angle(30) for a in angles})
+
+        elif isinstance(angles, slice):
+            return HexClock({a: self.at_angle(30) for a in range(*angles.indices(13))})
+
+        else:
+            raise TypeError("HexClock angles must be of type 'int', 'Iterable' or 'slice'")
+    
     def __iter__(self) -> Generator[Hex, None, None]:
         yield from super().values()
 
@@ -107,12 +136,12 @@ class HexClock(dict):
         return value in self.values()
 
     def __str__(self) -> str:
-        """Return a nicely formatted HexMap representation string"""
-        return super().__repr__().replace("), ", "),\n ")
+        """Return a nicely formatted HexClock representation string"""
+        return ",\n".join(f"{hour}: {str(hx)}" for hour, hx in self.items())
 
     def __repr__(self) -> str:
-        """Return the canonical string representation of HexMap."""
-        return f"hexpy.navigate.HexClock({str(self)})"
+        """Return the canonical string representation of HexClock."""
+        return "hexpy.navigate.HexClock({\n" + str(self) + "})"
 
 
 def flat_clock() -> HexClock:
@@ -208,22 +237,25 @@ class HexCompass(dict):
         """
         return HexCompass({h: hx + cmp_hx for h, cmp_hx in self.items()})
 
+    __add__ = shifted
+    __radd__ = shifted
+
     @overload
-    def __getitem__(self, points: str) -> Hex:
+    def at_point(self, points: str) -> Hex:
         ...
 
     @overload
-    def __getitem__(self, points: tuple[str, ...]) -> HexCompass:
+    def at_point(self, points: Iterable[str]) -> HexCompass:
         ...
 
-    def __getitem__(self, points: str | tuple[str, ...]) -> Hex | HexCompass:
+    def at_point(self, points: str | Iterable[str]) -> Hex | HexCompass:
         """Get Hex at compass point(s)
 
         Args:
-            __key (str | tuple[str]): _description_
+            points (str | Iterable[str]): _description_
 
         Returns:
-            Hex: _description_
+            Hex | HexCompass: _description_
         """
         if isinstance(points, str):
             if points not in self:
@@ -235,16 +267,19 @@ class HexCompass(dict):
                 )
             return super().__getitem__(points)
 
-        elif isinstance(points, tuple):
-            return HexCompass({p: self[p] for p in points})
+        elif isinstance(points, Iterable):
+            return HexCompass({p: self.at_point(p) for p in points})
 
-        # HexCompass doesn't support slicing
+        elif isinstance(points, slice):
+            raise TypeError("HexCompass doesn't support slicing")
 
-        else:
-            raise TypeError("HexCompass key must be of type 'str' or tuple[str, ...]")
+        raise TypeError(
+            "HexCompass point must be of type 'str' or Iterable[str]. If you want to slice use HexClock instead."
+        )
 
     # Because why not?
-    __call__ = __getitem__
+    __getitem__ = at_point
+    __call__ = at_point
 
     def __iter__(self) -> Generator[Hex, None, None]:
         yield from super().values()
@@ -253,12 +288,12 @@ class HexCompass(dict):
         return value in self.values()
 
     def __str__(self) -> str:
-        """Return a nicely formatted HexMap representation string"""
-        return super().__repr__().replace("), '", "),\n '")
+        """Return a nicely formatted HexCompass representation string"""
+        return ",\n".join(f"'{point}': {str(hx)}" for point, hx in self.items())
 
     def __repr__(self) -> str:
-        """Return the canonical string representation of HexMap."""
-        return f"navigate.HexCompass({str(self)})"
+        """Return the canonical string representation of HexCompass."""
+        return "hexpy.navigate.HexCompass({\n" + str(self) + "})"
 
 
 def flat_compass() -> HexCompass:

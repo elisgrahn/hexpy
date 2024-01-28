@@ -347,9 +347,9 @@ class Hex:
             return get_coord(coords)
 
         return tuple(get_coord(coord) for coord in coords)
-    
+
     # width, height, horizontal and vertical spacing
-    
+
     @property
     def width(self) -> float:
         """Returns the width of a Hex in pixels"""
@@ -358,7 +358,7 @@ class Hex:
                 "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
         return self.hexlayout.width
-    
+
     @property
     def height(self) -> float:
         """Returns the height of a Hex in pixels"""
@@ -367,12 +367,12 @@ class Hex:
                 "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
         return self.hexlayout.height
-    
+
     @property
     def horiz(self) -> float:
         """Returns the horizontal spacing between Hexes"""
         return self.hexlayout.horizontal_spacing
-    
+
     horizontal_spacing = horiz
 
     @property
@@ -1676,15 +1676,15 @@ class Hex:
 
     @classmethod
     @overload
-    def o_clock(cls, hours: tuple[int, ...]) -> HexClock:
+    def o_clock(cls, hours: Iterable[int]) -> HexClock:
         ...
 
     @classmethod
-    def o_clock(cls, hours: int | tuple[int, ...]) -> Hex | HexClock:
+    def o_clock(cls, hours: int | Iterable[int]) -> Hex | HexClock:
         """_summary_
 
         Args:
-            hours (int | tuple[int, ...]): _description_
+            hours (int | Iterable[int]): _description_
 
         Raises:
             RuntimeError: _description_
@@ -1698,7 +1698,7 @@ class Hex:
                 "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
             )
 
-        return cls.hexclock[hours]
+        return cls.hexclock.at_hour(hours)
 
     @classmethod
     @overload
@@ -1707,15 +1707,15 @@ class Hex:
 
     @classmethod
     @overload
-    def compass(cls, points: tuple[str, ...]) -> HexCompass:
+    def compass(cls, points: Iterable[int]) -> HexCompass:
         ...
 
     @classmethod
-    def compass(cls, points: str | tuple[str, ...]) -> Hex | HexCompass:
+    def compass(cls, points: str | Iterable[int]) -> Hex | HexCompass:
         """_summary_
 
         Args:
-            points (str | tuple[str, ...]): _description_
+            points (str | Iterable[int]): _description_
 
         Raises:
             RuntimeError: _description_
@@ -1730,6 +1730,69 @@ class Hex:
             )
 
         return cls.hexcompass[points]
+
+    @classmethod
+    @overload
+    def at_angle(cls, angles: int) -> Hex:
+        ...
+
+    @classmethod
+    @overload
+    def at_angle(cls, angles: Iterable[int]) -> HexClock:
+        ...
+
+    @classmethod
+    def at_angle(cls, angles: int | Iterable[int]) -> Hex | HexClock:
+        """_summary_
+
+        Args:
+            hours (int | Iterable[int]): _description_
+
+        Raises:
+            RuntimeError: _description_
+
+        Returns:
+            Hex | HexClock: _description_
+        """
+        if not hasattr(cls, "hexclock"):
+            raise RuntimeError(
+                "'Layout' has not yet been defined, to define one use 'Hex.flat_layout()', 'Hex.pointy_layout()' or 'Hex.custom_layout()'"
+            )
+        
+        return cls.hexclock.at_angle(angles)
+
+    def neighbor_o_clock(self, hours: int | Iterable[int]):
+        """_summary_
+
+        Args:
+            hours (int | Iterable[int]): _description_
+
+        Returns:
+            _type_: _description_
+        """        
+        return self.o_clock(hours) + self
+
+    def neighbor_compass(self, points: int | Iterable[int]):
+        """_summary_
+
+        Args:
+            points (int | Iterable[int]): _description_
+
+        Returns:
+            _type_: _description_
+        """        
+        return self.compass(points) + self
+
+    def neighbor_at_angle(self, angles: int | Iterable[int]):
+        """_summary_
+
+        Args:
+            angles (int | Iterable[int]): _description_
+
+        Returns:
+            _type_: _description_
+        """        
+        return self.at_angle(angles) + self
 
 
 Hexigo = Hex(0, 0)
