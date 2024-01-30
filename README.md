@@ -58,5 +58,3 @@ Hex(q=1, r=0, s=-1)
 >>> h.hexclock
 
 ```
-
-- ### Creation

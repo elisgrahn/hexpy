@@ -5,20 +5,39 @@ from pygame import gfxdraw
 
 from hexpy import Hex, Hexigo, hexmap
 
+BACKGROUND = (185, 173, 161)
+LINES = (65, 60, 55)
+TEXT = (121, 114, 104)
 COLOR_MAP = {
-    0: (120, 120, 120),
-    2: (0, 0, 255),
-    4: (0, 255, 0),
-    8: (255, 0, 0),
-    16: (255, 0, 255),
-    32: (0, 128, 255),
+    0: (213, 204, 199),
+    2: (236, 227, 218),
+    4: (235, 225, 200),
+    8: (232, 180, 130),
+    16: (232, 154, 108),
+    32: (230, 131, 102),
+    64: (228, 103, 71),
+    128: (240, 215, 146),
+    256: (232, 206, 113),
+    512: (231, 202, 102),
+    1024: (240, 208, 109),
+    2048: (230, 195, 79),
 }
 
 
 class Hex2028:
-    def __init__(self, surface: p.Surface = None, size: int = 2):
-        self.size = size
-        self.hxmp = hexmap.hexagon(radius=size, value=0)
+    def __init__(
+        self,
+        surface: p.Surface,
+        hx_size: int,
+        hx_origin: tuple[int, int],
+        board_size: int = 2,
+    ):
+        self.board_size = board_size
+        self.hx_size = hx_size
+
+        Hex.pointy_layout(hx_size, hx_origin)
+        self.hxmp = hexmap.hexagon(radius=board_size, value=0)
+
         self.hxmp.pop(Hexigo)
         self.surface = surface
         self.keybinds = {
@@ -29,6 +48,7 @@ class Hex2028:
             p.K_a: 9,
             p.K_w: 11,
         }
+        self.font = p.font.SysFont("arial", hx_size)
 
     def _move_fwd(self, hx: Hex, direc: Hex, val: int):
         while hx + direc in self.hxmp and self.hxmp[hx + direc] in {0, val}:
@@ -66,7 +86,7 @@ class Hex2028:
 
         init_hexes = (start,) + tuple(
             hx
-            for i in range(1, self.size + 1)
+            for i in range(1, self.board_size + 1)
             for hx in (start + i * dir1, start + i * dir2)
         )
 
@@ -75,26 +95,47 @@ class Hex2028:
 
         self.place_random()
 
+    def draw_text(
+        self,
+        hx: Hex,
+        text: str,
+    ):
+        rendered = self.font.render(text, True, TEXT)
+        rect = rendered.get_rect(center=hx.to_pixel())
+        self.surface.blit(rendered, rect)
+
+    def draw_circle(
+        self,
+        hx: Hex,
+        color: tuple[int, int, int],
+        radius: float = 0.6,
+    ):
+        pos = hx.to_pixel()
+        rad = round(self.hx_size * radius)
+
+        gfxdraw.filled_circle(self.surface, pos.x, pos.y, rad, color)  # fill
+        gfxdraw.aacircle(self.surface, pos.x, pos.y, rad, LINES)  # outline
+
     def draw_hex(
         self,
         hx: Hex,
-        col: tuple[int, int, int],
+        color: tuple[int, int, int],
         factor: float = 1,
-        filled: bool = True,
-    ) -> None:
+    ):
         polygon = tuple(hx.polygon_pixels(factor))
 
-        if filled:
-            gfxdraw.filled_polygon(self.surface, polygon, col)  # fill
-            gfxdraw.aapolygon(self.surface, polygon, (0, 0, 0))  # outline
-        else:
-            gfxdraw.aapolygon(self.surface, polygon, col)  # outline
+        gfxdraw.filled_polygon(self.surface, polygon, color)  # fill
+        gfxdraw.aapolygon(self.surface, polygon, LINES)  # outline
 
     def draw(self):
-        self.surface.fill((70, 70, 70))
+        self.surface.fill(BACKGROUND)
 
         for hx, val in self.hxmp.hexes_and_values():
-            self.draw_hex(hx, COLOR_MAP[val])
+            self.draw_hex(hx, COLOR_MAP[0])
+
+            if val != 0:
+                self.draw_circle(hx, COLOR_MAP[val])
+                self.draw_text(hx, str(val))
 
         p.display.flip()
 
@@ -104,12 +145,12 @@ def main():
     clock = p.time.Clock()
 
     width, height = 800, 800
-    Hex.pointy_layout(90, (width // 2, height // 2))
 
+    p.init()
     screen = p.display.set_mode((width, height))
     p.display.set_caption("Hexagonal 2048")
 
-    game = Hex2028(screen)
+    game = Hex2028(screen, 90, (width // 2, height // 2))
 
     game.hxmp[Hex.o_clock(3)] = 2
     game.hxmp[Hex.o_clock(6)] = 2
